@@ -22,7 +22,7 @@ export default function Home(){
   async function signIn(){setLoading(true);setError('');const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setError(error.message);else setSession(data.session);setLoading(false);}
   async function loadAttendees(){setLoading(true);setError('');const {data,error}=await supabase.from('training_attendees').select('full_name,email,agency_name,title_position,certificate_number').order('full_name');if(error)setError(error.message);else setAttendees(data??[]);setLoading(false);}
 
-  const agencies=useMemo(()=>['All agencies',...Array.from(new Set(attendees.map(a=>a.agency_name).filter((value):value is string=>Boolean(value))).sort())],[attendees]);
+  const agencies=useMemo(()=>['All agencies',...Array.from(new Set(attendees.map(a=>a.agency_name).filter((value):value is string=>Boolean(value)))).sort()],[attendees]);
   const filteredAttendees=useMemo(()=>{
     const term=search.trim().toLowerCase();
     return attendees.filter(a=>{

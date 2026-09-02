@@ -1,19 +1,17 @@
 'use client';
 
-import {useEffect,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 
 type Agency={id:string;agency_name:string|null;agency_address:string|null;city_state_zip:string|null;contact_person:string|null;contact_phone:string|null;contact_email:string|null;active:boolean|null;};
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export default function AgenciesPage(){
-  const [auth,setAuth]=useState(false);
-  const [rows,setRows]=useState<Agency[]>([]);
-  const [error,setError]=useState('');
-  const [loading,setLoading]=useState(false);
+  const [auth,setAuth]=useState(false);const [rows,setRows]=useState<Agency[]>([]);const [search,setSearch]=useState('');const [view,setView]=useState('All agencies');const [error,setError]=useState('');const [loading,setLoading]=useState(false);
   async function load(){setLoading(true);setError('');const {data,error}=await supabase.from('agencies').select('id,agency_name,agency_address,city_state_zip,contact_person,contact_phone,contact_email,active').order('agency_name');if(error)setError(error.message);else setRows(data??[]);setLoading(false);}
   async function check(){const {data}=await supabase.auth.getSession();setAuth(Boolean(data.session));}
   useEffect(()=>{check();},[]);
+  const filtered=useMemo(()=>{const term=search.trim().toLowerCase();return rows.filter(row=>{const viewMatch=view==='All agencies'||(view==='Active'&&row.active)||(view==='Inactive'&&!row.active);const text=[row.agency_name,row.agency_address,row.city_state_zip,row.contact_person,row.contact_phone,row.contact_email].filter(Boolean).join(' ').toLowerCase();return viewMatch&&(!term||text.includes(term));});},[rows,search,view]);
   if(!auth)return <main className="shell"><section className="card"><h1>Agency Directory</h1><p>Administrator sign-in is required.</p><a href="/">Return to sign in</a></section></main>;
-  return <main className="shell"><header className="header"><div><div className="brand">Agency Directory</div><div className="subtitle">Read-only agency records</div></div><a href="/">Back to dashboard</a></header><section className="card"><button disabled={loading} onClick={load}>Load agencies</button>{error&&<p>{error}</p>}{rows.length>0&&<table className="table"><thead><tr><th>Agency</th><th>Location</th><th>Contact</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td>{row.agency_name||'—'}</td><td>{[row.agency_address,row.city_state_zip].filter(Boolean).join(', ')||'—'}</td><td>{row.contact_person||'—'}</td><td>{row.contact_phone||'—'}</td><td>{row.contact_email||'—'}</td><td>{row.active?'Active':'Inactive'}</td></tr>)}</tbody></table>}</section></main>;
+  return <main className="shell"><header className="header"><div><div className="brand">Agency Directory</div><div className="subtitle">Read-only agency records</div></div><a href="/">Back to dashboard</a></header><section className="grid"><div className="metric">Agencies<strong>{rows.length}</strong></div><div className="metric">Active<strong>{rows.filter(row=>row.active).length}</strong></div><div className="metric">Showing<strong>{filtered.length}</strong></div></section><section className="card"><div className="controls"><input aria-label="Search agencies" placeholder="Search agency, location, or contact" value={search} onChange={event=>setSearch(event.target.value)}/><select aria-label="Filter agencies by status" value={view} onChange={event=>setView(event.target.value)}><option>All agencies</option><option>Active</option><option>Inactive</option></select><button disabled={loading} onClick={load}>{loading?'Loading…':'Refresh agencies'}</button></div>{error&&<p>{error}</p>}{rows.length===0&&!loading&&!error&&<p>Load agencies to begin.</p>}{filtered.length>0&&<table className="table"><thead><tr><th>Agency</th><th>Location</th><th>Contact</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead><tbody>{filtered.map(row=><tr key={row.id}><td>{row.agency_name||'—'}</td><td>{[row.agency_address,row.city_state_zip].filter(Boolean).join(', ')||'—'}</td><td>{row.contact_person||'—'}</td><td>{row.contact_phone||'—'}</td><td>{row.contact_email||'—'}</td><td><span className="pill">{row.active?'Active':'Inactive'}</span></td></tr>)}</tbody></table>}{rows.length>0&&!filtered.length&&<p>No agencies match the current filters.</p>}</section></main>;
 }

@@ -4,6 +4,7 @@ import {useEffect,useMemo,useState} from 'react';
 import {createClient,Session} from '@supabase/supabase-js';
 
 type Attendee={full_name:string|null;email:string|null;agency_name:string|null;title_position:string|null;certificate_number:string|null;};
+type Request={request_number:string|null;agency_name:string|null;requested_by:string|null;preferred_date:string|null;training_format:string|null;status:string|null;class_status:string|null;};
 
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -12,8 +13,11 @@ export default function Home(){
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [attendees,setAttendees]=useState<Attendee[]>([]);
+  const [requests,setRequests]=useState<Request[]>([]);
   const [search,setSearch]=useState('');
   const [agency,setAgency]=useState('All agencies');
+  const [requestSearch,setRequestSearch]=useState('');
+  const [requestStatus,setRequestStatus]=useState('All statuses');
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(false);
 
@@ -21,18 +25,14 @@ export default function Home(){
 
   async function signIn(){setLoading(true);setError('');const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setError(error.message);else setSession(data.session);setLoading(false);}
   async function loadAttendees(){setLoading(true);setError('');const {data,error}=await supabase.from('training_attendees').select('full_name,email,agency_name,title_position,certificate_number').order('full_name');if(error)setError(error.message);else setAttendees(data??[]);setLoading(false);}
+  async function loadRequests(){setLoading(true);setError('');const {data,error}=await supabase.from('training_requests').select('request_number,agency_name,requested_by,preferred_date,training_format,status,class_status').order('created_at',{ascending:false});if(error)setError(error.message);else setRequests(data??[]);setLoading(false);}
 
   const agencies=useMemo(()=>['All agencies',...Array.from(new Set(attendees.map(a=>a.agency_name).filter((value):value is string=>Boolean(value)))).sort()],[attendees]);
-  const filteredAttendees=useMemo(()=>{
-    const term=search.trim().toLowerCase();
-    return attendees.filter(a=>{
-      const matchesAgency=agency==='All agencies'||a.agency_name===agency;
-      const searchable=[a.full_name,a.email,a.agency_name,a.title_position,a.certificate_number].filter(Boolean).join(' ').toLowerCase();
-      return matchesAgency&&(!term||searchable.includes(term));
-    });
-  },[agency,attendees,search]);
+  const filteredAttendees=useMemo(()=>{const term=search.trim().toLowerCase();return attendees.filter(a=>{const matchesAgency=agency==='All agencies'||a.agency_name===agency;const searchable=[a.full_name,a.email,a.agency_name,a.title_position,a.certificate_number].filter(Boolean).join(' ').toLowerCase();return matchesAgency&&(!term||searchable.includes(term));});},[agency,attendees,search]);
+  const requestStatuses=useMemo(()=>['All statuses',...Array.from(new Set(requests.flatMap(r=>[r.status,r.class_status]).filter((value):value is string=>Boolean(value)))).sort()],[requests]);
+  const filteredRequests=useMemo(()=>{const term=requestSearch.trim().toLowerCase();return requests.filter(r=>{const statusMatch=requestStatus==='All statuses'||r.status===requestStatus||r.class_status===requestStatus;const searchable=[r.request_number,r.agency_name,r.requested_by,r.training_format,r.status,r.class_status].filter(Boolean).join(' ').toLowerCase();return statusMatch&&(!term||searchable.includes(term));});},[requestSearch,requestStatus,requests]);
 
   if(!session)return <main className="shell"><section className="card"><h1>Backtrace Training Administration</h1><p className="subtitle">New rebuild environment — production remains unchanged.</p><h2>Administrator sign-in</h2><input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/><button disabled={loading||!email||!password} onClick={signIn}>Sign in</button>{error&&<p>{error}</p>}</section></main>;
 
-  return <main className="shell"><header className="header"><div><div className="brand">Backtrace Training Administration</div><div className="subtitle">Rebuild preview · read-only attendee directory</div></div><button onClick={()=>supabase.auth.signOut()}>Sign out</button></header><section className="grid"><div className="metric">Attendees<strong>{attendees.length}</strong></div><div className="metric">Showing<strong>{filteredAttendees.length}</strong></div></section><section className="card" style={{marginTop:20}}><div className="controls"><input aria-label="Search attendees" placeholder="Search name, email, agency, title, or certificate" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="Filter by agency" value={agency} onChange={e=>setAgency(e.target.value)}>{agencies.map(value=><option key={value}>{value}</option>)}</select></div><button disabled={loading} onClick={loadAttendees}>Load attendee directory</button>{error&&<p>{error}</p>}{filteredAttendees.length>0&&<table className="table"><thead><tr><th>Name</th><th>Email</th><th>Agency</th><th>Title</th><th>Certificate</th></tr></thead><tbody>{filteredAttendees.map((a,i)=><tr key={a.certificate_number||a.email||i}><td>{a.full_name}</td><td>{a.email}</td><td>{a.agency_name}</td><td>{a.title_position}</td><td><span className="pill">{a.certificate_number||'None'}</span></td></tr>)}</tbody></table>}{attendees.length>0&&filteredAttendees.length===0&&<p>No attendees match the current search and agency filter.</p>}</section></main>;
+  return <main className="shell"><header className="header"><div><div className="brand">Backtrace Training Administration</div><div className="subtitle">Rebuild preview · read-only administration</div></div><button onClick={()=>supabase.auth.signOut()}>Sign out</button></header><section className="grid"><div className="metric">Attendees<strong>{attendees.length}</strong></div><div className="metric">Requests<strong>{requests.length}</strong></div></section><section className="card" style={{marginTop:20}}><h2>Attendee Directory</h2><div className="controls"><input aria-label="Search attendees" placeholder="Search name, email, agency, title, or certificate" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="Filter by agency" value={agency} onChange={e=>setAgency(e.target.value)}>{agencies.map(value=><option key={value}>{value}</option>)}</select></div><button disabled={loading} onClick={loadAttendees}>Load attendee directory</button>{error&&<p>{error}</p>}{filteredAttendees.length>0&&<table className="table"><thead><tr><th>Name</th><th>Email</th><th>Agency</th><th>Title</th><th>Certificate</th></tr></thead><tbody>{filteredAttendees.map((a,i)=><tr key={a.certificate_number||a.email||i}><td>{a.full_name}</td><td>{a.email}</td><td>{a.agency_name}</td><td>{a.title_position}</td><td><span className="pill">{a.certificate_number||'None'}</span></td></tr>)}</tbody></table>}{attendees.length>0&&filteredAttendees.length===0&&<p>No attendees match the current search and agency filter.</p>}</section><section className="card" style={{marginTop:20}}><h2>Training Requests</h2><p className="subtitle">Read-only request overview. No request actions are available.</p><div className="controls"><input aria-label="Search training requests" placeholder="Search request, agency, requester, format, or status" value={requestSearch} onChange={e=>setRequestSearch(e.target.value)}/><select aria-label="Filter training requests by status" value={requestStatus} onChange={e=>setRequestStatus(e.target.value)}>{requestStatuses.map(value=><option key={value}>{value}</option>)}</select></div><button disabled={loading} onClick={loadRequests}>Load training requests</button>{filteredRequests.length>0&&<table className="table"><thead><tr><th>Request</th><th>Agency</th><th>Requester</th><th>Preferred date</th><th>Format</th><th>Status</th></tr></thead><tbody>{filteredRequests.map((r,i)=><tr key={r.request_number||i}><td>{r.request_number||'—'}</td><td>{r.agency_name||'—'}</td><td>{r.requested_by||'—'}</td><td>{r.preferred_date||'—'}</td><td>{r.training_format||'—'}</td><td><span className="pill">{r.status||r.class_status||'—'}</span></td></tr>)}</tbody></table>}{requests.length>0&&filteredRequests.length===0&&<p>No training requests match the current search and status filter.</p>}</section></main>;
 }

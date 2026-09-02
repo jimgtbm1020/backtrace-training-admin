@@ -33,3 +33,5 @@ nav.card .controls a:hover{background:#e4effb;border-color:#9fc0e3;text-decorati
 .pill{display:inline-block;padding:5px 10px;border-radius:999px;background:var(--success-bg);color:var(--success);font-size:12px;font-weight:800}
 label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:13px;font-weight:700}
 @media(max-width:720px){.shell{padding:24px 14px 40px}.header{align-items:flex-start;flex-direction:column}.brand{font-size:23px}.card{padding:19px;overflow-x:auto}.table{font-size:13px;min-width:720px}.controls{align-items:stretch;flex-direction:column}.controls input,.controls select{width:100%}}
+
+.nav-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.nav-group{padding:16px;border:1px solid #dbe5f0;border-radius:12px;background:#f8fbfe}.nav-group h3{margin:0 0 8px;color:var(--navy);font-size:14px;letter-spacing:.04em;text-transform:uppercase}.nav-group .controls{margin:0;align-items:stretch}.nav-group .controls a{width:100%;justify-content:flex-start}@media(max-width:900px){.nav-groups{grid-template-columns:1fr}}

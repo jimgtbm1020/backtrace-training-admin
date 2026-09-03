@@ -60,7 +60,7 @@ export default function TrainingRequestEditPage(){
   if(profileError||!row?.active){setError('Your active profile could not be verified.');setReady(true);return;}
   setProfile(row as Profile);
   const [{data:trainerRows},{data:moduleRows}]=await Promise.all([
-   supabase.from('profiles').select('id,email,full_name').eq('role','trainer').eq('active',true).order('email'),
+   supabase.from('profiles').select('id,email,full_name').in('role',['trainer','coordinator','admin']).eq('active',true).order('email'),
    supabase.from('training_modules').select('id,category,module_name,duration_minutes,sort_order').eq('active',true).order('category').order('sort_order')
   ]);
   setTrainers((trainerRows??[]) as Trainer[]);setModules((moduleRows??[]) as Module[]);

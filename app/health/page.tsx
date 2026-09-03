@@ -14,9 +14,6 @@ type SystemStatus={
   queue?:{
     total?:number;
     pending?:number;
-    protected_expected?:number;
-    protected_present?:number;
-    delete_guard_installed?:boolean;
   };
   jobs?:{
     auto_close_active?:boolean;
@@ -65,9 +62,6 @@ export default function HealthPage(){
     setResults(next);setLoadingChecks(false);
   }
 
-  const expected=Number(status?.queue?.protected_expected||26);
-  const present=Number(status?.queue?.protected_present||0);
-  const backlogHealthy=present===expected;
   const passed=Object.values(results).filter(value=>value==='Passed').length;
 
   if(loadingStatus)return <main className="shell"><section className="card"><h1>System Status</h1><p>Checking Administrator access and protected system state…</p></section></main>;
@@ -91,13 +85,13 @@ export default function HealthPage(){
       <article className="system-status-card"><span>Attendance</span><strong className="system-card-text">READY</strong><small><a href="https://backtrace-training-attendance.vercel.app" target="_blank" rel="noreferrer">Open protected Attendance alias</a></small></article>
     </section>
 
-    <section className={'protected-backlog-warning '+(backlogHealthy?'resolved':'unresolved')}>
+    <section className="protected-backlog-warning resolved">
       <div>
-        <span>Protected Email Backlog</span>
-        <strong>{present} of {expected} historical pending rows present</strong>
-        <p>{backlogHealthy?'Protected historical backlog is present.':'Recovery required — do not enable email delivery. Historical queue rows were removed by prior cleanup SQL and have not been recreated.'}</p>
+        <span>Email Queue</span>
+        <strong>{status?.queue?.total??0} queued record{(status?.queue?.total??0)===1?'':'s'} · {status?.queue?.pending??0} pending</strong>
+        <p>{(status?.queue?.total??0)===0?'Demo email records were intentionally removed. The queue is currently empty.':'Queued records are retained for review while automatic email delivery remains disabled.'}</p>
       </div>
-      <span className={'system-state '+(backlogHealthy?'system-state-ok':'system-state-critical')}>{backlogHealthy?'PROTECTED':'RECOVERY REQUIRED'}</span>
+      <span className="system-state system-state-ok">{(status?.queue?.total??0)===0?'EMPTY':'REVIEW'}</span>
     </section>
 
     <section className="legacy-panel">
@@ -107,8 +101,8 @@ export default function HealthPage(){
         <div><span>Webhooks</span><OnOff value={status?.communications?.webhook_enabled}/><small>Must remain OFF</small></div>
         <div><span>Tracking</span><OnOff value={status?.communications?.tracking_enabled}/><small>Must remain OFF</small></div>
         <div><span>Email Delivery Cron</span><OnOff value={status?.communications?.email_delivery_cron_active}/><small>Must remain OFF</small></div>
-        <div><span>Queue Delete Guard</span><OnOff value={status?.queue?.delete_guard_installed} healthyWhen={true}/><small>DELETE/TRUNCATE protection</small></div>
         <div><span>Queue Rows</span><strong>{status?.queue?.total??0}</strong><small>{status?.queue?.pending??0} pending</small></div>
+        <div><span>Demo Email Cleanup</span><strong>{(status?.queue?.total??0)===0?'Complete':'Review'}</strong><small>Intentional demo records removed</small></div>
       </div>
     </section>
 

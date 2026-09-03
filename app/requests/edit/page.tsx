@@ -69,7 +69,7 @@ export default function TrainingRequestEditPage(){
   if(requestId){
    const request=loaded.find(item=>item.id===requestId);
    if(!request)setError('The requested training record could not be found.');
-   else if(canEditWith(request,row as Profile,data.user)){selectRequest(request);}
+   else if(canEditWith(request,row as Profile,data.user)){selectRequest(request);const {data:moduleLinks}=await supabase.from('request_modules').select('module_id').eq('request_id',request.id);setSelectedModuleIds((moduleLinks??[]).map(item=>Number(item.module_id)));}
    else setError('This request is locked or is not assigned to your account.');
   }
   setReady(true);

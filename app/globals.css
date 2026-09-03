@@ -64,3 +64,5 @@
 .attendance-roster-table{min-width:1180px}.attendance-row-actions{display:flex;gap:6px;flex-wrap:wrap}.attendance-row-actions button{white-space:nowrap}.attendance-row-actions .danger-button{background:#fff3f2;color:#b42318;border-color:#efc3be}
 
 .trainer-print-section{margin-top:14px;break-inside:avoid}.trainer-print-section h2{margin:0 0 8px;padding:7px 9px;background:#f1f4f8;color:#173861;border-radius:5px;font-size:13px}.trainer-print-detail{margin:7px 0;padding:8px 9px;border:1px solid #e2e8f0;border-radius:6px}.trainer-print-detail span{display:block;color:#637894;font-size:9px;font-weight:900;text-transform:uppercase;margin-bottom:3px}.trainer-print-detail strong{display:block;color:#173861;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+
+.add-attendee-checkin{grid-column:1/-1!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:8px!important;padding:9px 10px;border:1px solid #e0e7f0;border-radius:7px;background:#f8fafc;color:#173861!important}.add-attendee-checkin input{width:16px!important;height:16px!important;margin:0!important}

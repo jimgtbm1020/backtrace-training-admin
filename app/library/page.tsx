@@ -2,6 +2,7 @@
 
 import {useEffect,useMemo,useState} from 'react';
 import {createClient,Session} from '@supabase/supabase-js';
+import * as tus from 'tus-js-client';
 
 type Role='admin'|'coordinator'|'trainer'|'viewer';
 type Product={id:string;name:string;active:boolean|null};
@@ -28,6 +29,10 @@ const TYPE_OPTIONS=[
 const typeLabel=(value:string|null|undefined)=>TYPE_OPTIONS.find(([code])=>code===value)?.[1]||String(value||'Other').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase());
 const audienceLabel=(value:string|null|undefined)=>value==='internal'?'Trainer Only':'Student + Trainer';
 const fmtBytes=(value:number)=>value>=1024*1024?(value/(1024*1024)).toFixed(value>=10*1024*1024?0:1)+' MB':Math.max(1,Math.ceil(value/1024))+' KB';
+const MIME_BY_EXTENSION:Record<string,string>={'.pdf':'application/pdf','.doc':'application/msword','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.ppt':'application/vnd.ms-powerpoint','.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation','.xls':'application/vnd.ms-excel','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.txt':'text/plain','.csv':'text/csv','.zip':'application/zip','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm'};
+const fileExtension=(name:string)=>name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0]||'';
+const fileMime=(file:File)=>file.type||MIME_BY_EXTENSION[fileExtension(file.name)]||'';
+const mediaKind=(mime:string,name:string)=>mime.startsWith('video/')?'video':mime.startsWith('image/')?'image':mime==='application/zip'||name.toLowerCase().endsWith('.zip')?'bundle':'document';
 
 export default function LibraryPage(){
   const [auth,setAuth]=useState<Session|null>(null);
@@ -72,6 +77,7 @@ export default function LibraryPage(){
   const [showStatePicker,setShowStatePicker]=useState(false);
   const [uploadError,setUploadError]=useState('');
   const [uploading,setUploading]=useState(false);
+  const [uploadProgress,setUploadProgress]=useState(0);
 
   const [showVersions,setShowVersions]=useState(false);
   const [versionTitle,setVersionTitle]=useState('');
@@ -213,7 +219,7 @@ export default function LibraryPage(){
   function resetUpload(){
     setFile(null);setResourceTitle('');setResourceType('curriculum');setSelectedStates([]);setNotes('');
     setSelectedModule('');setVersionLabel('1.0');setEffectiveDate(new Date().toISOString().slice(0,10));
-    setAudience('student');setDownloadAllowed(true);setStateSearch('');setShowStatePicker(false);setUploadError('');
+    setAudience('student');setDownloadAllowed(true);setStateSearch('');setShowStatePicker(false);setUploadError('');setUploadProgress(0);
     setVersionMaterialId(null);setProductId(products[0]?.id||'');
   }
   function openNewResource(){resetUpload();setShowUpload(true);}
@@ -222,13 +228,52 @@ export default function LibraryPage(){
     const current=currentVersionMap.get(resource.id);setVersionLabel(current?.version_label?'': '1.0');setShowUpload(true);
   }
 
+  async function uploadStorageObject(source:File,path:string,mime:string){
+    setUploadProgress(0);
+    if(source.size<=6*1024*1024){
+      const {error}=await supabase.storage.from('training-materials').upload(path,source,{contentType:mime,upsert:false});
+      if(error)throw new Error(error.message);
+      setUploadProgress(100);
+      return;
+    }
+    const {data:sessionData}=await supabase.auth.getSession();
+    const session=sessionData.session;
+    if(!session?.access_token)throw new Error('Your session expired before the resumable upload could start.');
+    const endpoint=(process.env.NEXT_PUBLIC_SUPABASE_URL||'').replace(/\/$/,'')+'/storage/v1/upload/resumable';
+    if(!endpoint.startsWith('https://'))throw new Error('Supabase resumable upload endpoint is not configured.');
+    await new Promise<void>((resolve,reject)=>{
+      const upload=new tus.Upload(source,{
+        endpoint,
+        retryDelays:[0,1000,3000,5000,10000],
+        headers:{
+          authorization:'Bearer '+session.access_token,
+          apikey:process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY||'',
+          'x-upsert':'false'
+        },
+        uploadDataDuringCreation:true,
+        removeFingerprintOnSuccess:true,
+        chunkSize:6*1024*1024,
+        metadata:{bucketName:'training-materials',objectName:path,contentType:mime,cacheControl:'3600'},
+        onError:error=>reject(error),
+        onProgress:(uploaded,total)=>setUploadProgress(total?Math.round(uploaded/total*100):0),
+        onSuccess:()=>{setUploadProgress(100);resolve();}
+      });
+      upload.findPreviousUploads().then(previous=>{
+        if(previous.length)upload.resumeFromPreviousUpload(previous[0]);
+        upload.start();
+      }).catch(()=>upload.start());
+    });
+  }
+
   async function uploadResource(){
     if(!auth?.user||!canManage){setUploadError('Trainer, Coordinator, or Administrator permission is required.');return;}
     if(!file){setUploadError('Choose a file before uploading.');return;}
     if(file.size<=0||file.size>512*1024*1024){setUploadError('Files must be 512 MB or smaller.');return;}
+    const mime=fileMime(file);
+    if(!mime||!Object.values(MIME_BY_EXTENSION).includes(mime)){setUploadError('Unsupported file type. Use PDF, Office documents, text/CSV, ZIP, JPEG/PNG/WebP, MP4/MOV, or WebM.');return;}
     if(!versionLabel.trim()){setUploadError('Version is required.');return;}
     if(!versionMaterialId&&(!resourceTitle.trim()||!productId)){setUploadError('Resource title and product are required.');return;}
-    setUploading(true);setUploadError('');setMessage('');
+    setUploading(true);setUploadError('');setMessage('');setUploadProgress(0);
     let materialId=versionMaterialId;let createdMaterial=false;let storagePath='';let versionId='';
     try{
       if(!materialId){
@@ -246,12 +291,11 @@ export default function LibraryPage(){
       }
       const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,'-');
       storagePath=auth.user.id+'/'+materialId+'/'+crypto.randomUUID()+'-'+cleanName;
-      const {error:storageError}=await supabase.storage.from('training-materials').upload(storagePath,file,{contentType:file.type||'application/octet-stream',upsert:false});
-      if(storageError)throw new Error(storageError.message);
+      await uploadStorageObject(file,storagePath,mime);
       const {data:version,error:versionError}=await supabase.from('training_material_versions').insert({
         material_id:materialId,version_label:versionLabel.trim(),effective_date:effectiveDate||null,status:'draft',is_current:false,
-        storage_path:storagePath,original_filename:file.name,mime_type:file.type||'application/octet-stream',file_size:file.size,
-        media_kind:file.type.startsWith('video/')?'video':file.type.startsWith('image/')?'image':'document',
+        storage_path:storagePath,original_filename:file.name,mime_type:mime,file_size:file.size,
+        media_kind:mediaKind(mime,file.name),
         notes:notes.trim()||null,download_allowed:downloadAllowed,created_by:auth.user.id
       }).select('id').single();
       if(versionError||!version)throw new Error(versionError?.message||'Unable to create resource version.');
@@ -344,7 +388,7 @@ export default function LibraryPage(){
 
     {showVersions&&<div className="upload-modal-backdrop"><section className="upload-modal" role="dialog" aria-modal="true"><header><div><h2>{versionTitle}</h2><p>Version history for this resource.</p></div><button className="modal-close" onClick={()=>setShowVersions(false)}>Close</button></header><div className="upload-body">{versionRows.length?<div className="version-history-list">{versionRows.map(row=><div className="version-history-row" key={row.id}><div><strong>Version {row.version_label}</strong><span>{row.original_filename} · {fmtBytes(row.file_size)} · {row.effective_date||'No effective date'}</span></div><span className="pill">{row.is_current?'Current':row.status}</span><div><button onClick={()=>void openVersion(row)}>View</button>{canManage&&!row.is_current&&<button onClick={()=>void makeCurrent(row)}>Make Current</button>}</div></div>)}</div>:<p>No versions found.</p>}</div><footer><button className="cancel-upload" onClick={()=>setShowVersions(false)}>Close</button></footer></section></div>}
 
-    {showUpload&&canManage&&<div className="upload-modal-backdrop"><section className="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title"><header><div><h2 id="upload-title">{versionMaterialId?'New Resource Version':'Add Resource'}</h2><p>{versionMaterialId?'Upload and publish a new version of '+resourceTitle+'.':'Upload once. Resource type, audience, product, and state assignments define how the library is organized.'}</p></div><button className="modal-close" onClick={()=>{setShowUpload(false);resetUpload()}}>Close</button></header><div className="upload-body"><label className="drop-zone" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const dropped=event.dataTransfer.files?.[0];if(dropped){setFile(dropped);if(!resourceTitle)setResourceTitle(dropped.name.replace(/\.[^.]+$/,''))}}}><input type="file" onChange={event=>{const chosen=event.target.files?.[0]||null;setFile(chosen);if(chosen&&!resourceTitle)setResourceTitle(chosen.name.replace(/\.[^.]+$/,''))}}/><strong>{file?file.name:'Drop a resource file or video here'}</strong><span>{file?(fmtBytes(file.size)+' selected'):'or click to choose a file · up to 512 MB'}</span></label>{!versionMaterialId&&<><div className="upload-two-column"><label>RESOURCE TITLE<input value={resourceTitle} onChange={event=>setResourceTitle(event.target.value)} placeholder="Auto-filled from the file name"/></label><label>RESOURCE TYPE<select value={resourceType} onChange={event=>setResourceType(event.target.value)}>{TYPE_OPTIONS.map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>PRODUCT<select value={productId} onChange={event=>{setProductId(event.target.value);setSelectedModule('')}}><option value="">Select product</option>{products.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>TOOL / MODULE<select value={selectedModule} onChange={event=>setSelectedModule(event.target.value)}><option value="">All / General</option>{uploadModules.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>AUDIENCE<select value={audience} onChange={event=>setAudience(event.target.value as 'student'|'internal')}><option value="student">Student + Trainer</option><option value="internal">Trainer Only</option></select></label></div><div className="upload-field-label state-picker-field"><span className="field-caption">APPLICABLE STATE(S)</span><span>Choose one or multiple states. Leave National / General selected when the resource applies everywhere.</span><div className="selected-state-summary">{selectedStates.length?selectedStates.map(id=>jurisdictions.find(item=>item.id===id)?.code||id).join(', '):'National / General'}</div><button type="button" className="state-picker-trigger" onClick={()=>setShowStatePicker(value=>!value)}><strong>Choose Applicable States</strong><span>⌄</span></button>{showStatePicker&&<div className="state-picker-menu"><label className="national-state-option"><input type="checkbox" checked={selectedStates.length===0} onChange={()=>setSelectedStates([])}/><span><strong>National / General</strong><small>Applies everywhere</small></span></label><input className="state-search-input" value={stateSearch} onChange={event=>setStateSearch(event.target.value)} placeholder="Search states by name or abbreviation..."/><div className="state-options">{jurisdictions.filter(item=>item.code.toUpperCase()!=='GENERAL'&&(item.name+' '+item.code).toLowerCase().includes(stateSearch.toLowerCase())).map(item=><label className="state-option" key={item.id}><input type="checkbox" checked={selectedStates.includes(item.id)} onChange={()=>setSelectedStates(current=>current.includes(item.id)?current.filter(id=>id!==item.id):[...current,item.id])}/><strong>{item.code}</strong><span>{item.name}</span></label>)}</div><button type="button" className="state-picker-done" onClick={()=>{setShowStatePicker(false);setStateSearch('')}}>Done</button></div>}</div></>}<label className="upload-field-label">NOTES<textarea value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Optional notes about this resource, version, or when to use it"/></label><div className="additional-details-grid resource-version-fields"><label>VERSION<input value={versionLabel} onChange={event=>setVersionLabel(event.target.value)} placeholder="1.0"/></label><label>EFFECTIVE DATE<input type="date" value={effectiveDate} onChange={event=>setEffectiveDate(event.target.value)}/></label><label>FILE ACCESS<select value={downloadAllowed?'download':'view'} onChange={event=>setDownloadAllowed(event.target.value==='download')}><option value="download">Allow Download</option><option value="view">View / Stream Only</option></select></label></div>{uploadError&&<p className="error" role="alert">{uploadError}</p>}</div><footer><button className="cancel-upload" onClick={()=>{setShowUpload(false);resetUpload()}}>Cancel</button><button onClick={()=>void uploadResource()} disabled={uploading}>{uploading?'Uploading…':'Upload & Publish'}</button></footer></section></div>}
+    {showUpload&&canManage&&<div className="upload-modal-backdrop"><section className="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title"><header><div><h2 id="upload-title">{versionMaterialId?'New Resource Version':'Add Resource'}</h2><p>{versionMaterialId?'Upload and publish a new version of '+resourceTitle+'.':'Upload once. Resource type, audience, product, and state assignments define how the library is organized.'}</p></div><button className="modal-close" onClick={()=>{setShowUpload(false);resetUpload()}}>Close</button></header><div className="upload-body"><label className="drop-zone" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const dropped=event.dataTransfer.files?.[0];if(dropped){setFile(dropped);if(!resourceTitle)setResourceTitle(dropped.name.replace(/\.[^.]+$/,''))}}}><input type="file" onChange={event=>{const chosen=event.target.files?.[0]||null;setFile(chosen);if(chosen&&!resourceTitle)setResourceTitle(chosen.name.replace(/\.[^.]+$/,''))}}/><strong>{file?file.name:'Drop a resource file or video here'}</strong><span>{file?(fmtBytes(file.size)+' selected'):'or click to choose a file · up to 512 MB'}</span></label>{!versionMaterialId&&<><div className="upload-two-column"><label>RESOURCE TITLE<input value={resourceTitle} onChange={event=>setResourceTitle(event.target.value)} placeholder="Auto-filled from the file name"/></label><label>RESOURCE TYPE<select value={resourceType} onChange={event=>setResourceType(event.target.value)}>{TYPE_OPTIONS.map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label><label>PRODUCT<select value={productId} onChange={event=>{setProductId(event.target.value);setSelectedModule('')}}><option value="">Select product</option>{products.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>TOOL / MODULE<select value={selectedModule} onChange={event=>setSelectedModule(event.target.value)}><option value="">All / General</option>{uploadModules.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>AUDIENCE<select value={audience} onChange={event=>setAudience(event.target.value as 'student'|'internal')}><option value="student">Student + Trainer</option><option value="internal">Trainer Only</option></select></label></div><div className="upload-field-label state-picker-field"><span className="field-caption">APPLICABLE STATE(S)</span><span>Choose one or multiple states. Leave National / General selected when the resource applies everywhere.</span><div className="selected-state-summary">{selectedStates.length?selectedStates.map(id=>jurisdictions.find(item=>item.id===id)?.code||id).join(', '):'National / General'}</div><button type="button" className="state-picker-trigger" onClick={()=>setShowStatePicker(value=>!value)}><strong>Choose Applicable States</strong><span>⌄</span></button>{showStatePicker&&<div className="state-picker-menu"><label className="national-state-option"><input type="checkbox" checked={selectedStates.length===0} onChange={()=>setSelectedStates([])}/><span><strong>National / General</strong><small>Applies everywhere</small></span></label><input className="state-search-input" value={stateSearch} onChange={event=>setStateSearch(event.target.value)} placeholder="Search states by name or abbreviation..."/><div className="state-options">{jurisdictions.filter(item=>item.code.toUpperCase()!=='GENERAL'&&(item.name+' '+item.code).toLowerCase().includes(stateSearch.toLowerCase())).map(item=><label className="state-option" key={item.id}><input type="checkbox" checked={selectedStates.includes(item.id)} onChange={()=>setSelectedStates(current=>current.includes(item.id)?current.filter(id=>id!==item.id):[...current,item.id])}/><strong>{item.code}</strong><span>{item.name}</span></label>)}</div><button type="button" className="state-picker-done" onClick={()=>{setShowStatePicker(false);setStateSearch('')}}>Done</button></div>}</div></>}<label className="upload-field-label">NOTES<textarea value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Optional notes about this resource, version, or when to use it"/></label><div className="additional-details-grid resource-version-fields"><label>VERSION<input value={versionLabel} onChange={event=>setVersionLabel(event.target.value)} placeholder="1.0"/></label><label>EFFECTIVE DATE<input type="date" value={effectiveDate} onChange={event=>setEffectiveDate(event.target.value)}/></label><label>FILE ACCESS<select value={downloadAllowed?'download':'view'} onChange={event=>setDownloadAllowed(event.target.value==='download')}><option value="download">Allow Download</option><option value="view">View / Stream Only</option></select></label></div>{uploading&&<div className="resource-upload-progress" role="status" aria-live="polite"><div><strong>{file&&file.size>6*1024*1024?'Resumable upload':'Uploading resource'}</strong><span>{uploadProgress}%</span></div><progress max="100" value={uploadProgress}>{uploadProgress}%</progress><small>{file&&file.size>6*1024*1024?'Large files upload in resumable 6 MB chunks and can retry interrupted transfers.':'Preparing the resource for publication.'}</small></div>}{uploadError&&<p className="error" role="alert">{uploadError}</p>}</div><footer><button className="cancel-upload" onClick={()=>{setShowUpload(false);resetUpload()}}>Cancel</button><button onClick={()=>void uploadResource()} disabled={uploading}>{uploading?'Uploading…':'Upload & Publish'}</button></footer></section></div>}
 
     {showEmail&&<div className="upload-modal-backdrop"><section className="upload-modal" role="dialog" aria-modal="true"><header><div><h2>Email Resources</h2><p>Queue secure training-material links for this class.</p></div><button className="modal-close" onClick={()=>setShowEmail(false)}>Close</button></header><div className="upload-body"><div className="communications-off-notice"><strong>Automatic email delivery is OFF.</strong><span>This action creates pending queue records only; it does not activate delivery, webhooks, or tracking.</span></div><label className="upload-field-label">RECIPIENTS<select value={emailMode} onChange={e=>setEmailMode(e.target.value as 'attendees'|'custom')}><option value="attendees">All Registered Attendees</option><option value="custom">Custom Email Addresses</option></select></label>{emailMode==='custom'&&<label className="upload-field-label">CUSTOM EMAILS<textarea value={customEmails} onChange={e=>setCustomEmails(e.target.value)} placeholder="name@example.com, second@example.com"/></label>}<label className="upload-field-label">SECURE LINK EXPIRES<select value={emailDays} onChange={e=>setEmailDays(e.target.value)}><option value="7">7 days</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>{error&&<p className="error">{error}</p>}</div><footer><button className="cancel-upload" onClick={()=>setShowEmail(false)}>Cancel</button><button disabled={emailBusy} onClick={()=>void queueEmails()}>{emailBusy?'Queueing…':'Queue Emails'}</button></footer></section></div>}
   </main>;

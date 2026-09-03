@@ -4,7 +4,7 @@ import {createClient,Session} from '@supabase/supabase-js';
 
 type Role='admin'|'coordinator'|'trainer'|'viewer';
 type Request={id:string;agency_name:string|null;preferred_date:string|null;confirmed_date:string|null;status:string|null;class_status:string|null;assigned_trainer_id:string|null;};
-type AdminSystemStatus={app?:{version?:string|null;release_date?:string|null};communications?:{email_delivery_enabled?:boolean;webhook_enabled?:boolean;tracking_enabled?:boolean;email_delivery_cron_active?:boolean};queue?:{protected_expected?:number;protected_present?:number;delete_guard_installed?:boolean};};
+type AdminSystemStatus={app?:{version?:string|null;release_date?:string|null};communications?:{email_delivery_enabled?:boolean;webhook_enabled?:boolean;tracking_enabled?:boolean;email_delivery_cron_active?:boolean};queue?:{total?:number;pending?:number};};
 type VersionRow={id:number;version:string|null;release_date:string|null;title:string|null;is_current:boolean|null;};
 type BugSummary={id:string;source:string;component:string;summary:string;status:string;created_at:string;};
 
@@ -29,7 +29,6 @@ export default function Home(){
  const upcoming=useMemo(()=>{const now=new Date(),end=new Date(now);end.setDate(end.getDate()+30);return open.filter(r=>r.confirmed_date&&new Date(r.confirmed_date+'T12:00:00')>=now&&new Date(r.confirmed_date+'T12:00:00')<=end)},[open]);
  const currentVersion=versions.find(v=>v.is_current)||versions[0];
  const previousVersion=versions.find(v=>v.id!==currentVersion?.id);
- const protectedExpected=Number(systemStatus?.queue?.protected_expected||26),protectedPresent=Number(systemStatus?.queue?.protected_present||0);
  const communicationsSafe=systemStatus?[
    systemStatus.communications?.email_delivery_enabled,
    systemStatus.communications?.webhook_enabled,
@@ -45,7 +44,7 @@ export default function Home(){
 
  {role==='admin'&&<section className="dashboard-admin-overview"><div className="dashboard-admin-heading"><div><span>ADMINISTRATOR OVERVIEW</span><h2>Operational Status & Release Visibility</h2><p>Read-only production safety, release lineage and submitted issue summary.</p></div><button disabled={adminLoading} onClick={()=>void loadAdminOverview()}>{adminLoading?'Refreshing…':'Refresh Overview'}</button></div>{adminOverviewError&&<p className="error">{adminOverviewError}</p>}
  <div className="dashboard-admin-grid">
-   <article className="dashboard-admin-card"><div className="dashboard-admin-card-head"><div><span>SYSTEM STATUS</span><h3>Production safeguards</h3></div><a href="/health">Open</a></div><div className="dashboard-status-facts"><div><span>Current Version</span><strong>v{systemStatus?.app?.version||'—'}</strong></div><div><span>Release Writes</span><strong>OFF</strong></div><div><span>Communications</span><strong className={communicationsSafe?'good':'warn'}>{communicationsSafe?'SAFE / OFF':'REVIEW'}</strong></div><div><span>Queue Guard</span><strong className={systemStatus?.queue?.delete_guard_installed?'good':'warn'}>{systemStatus?.queue?.delete_guard_installed?'ON':'CHECK'}</strong></div></div><div className={protectedPresent===protectedExpected?'dashboard-backlog-ok':'dashboard-backlog-warning'}><strong>Protected Email Backlog: {protectedPresent} / {protectedExpected}</strong><span>{protectedPresent===protectedExpected?'Protected backlog present.':'Recovery required — email delivery must remain OFF.'}</span></div></article>
+   <article className="dashboard-admin-card"><div className="dashboard-admin-card-head"><div><span>SYSTEM STATUS</span><h3>Production safeguards</h3></div><a href="/health">Open</a></div><div className="dashboard-status-facts"><div><span>Current Version</span><strong>v{systemStatus?.app?.version||'—'}</strong></div><div><span>Release Writes</span><strong>OFF</strong></div><div><span>Communications</span><strong className={communicationsSafe?'good':'warn'}>{communicationsSafe?'SAFE / OFF':'REVIEW'}</strong></div><div><span>Email Queue</span><strong className={(systemStatus?.queue?.pending??0)===0?'good':'warn'}>{systemStatus?.queue?.pending??0} PENDING</strong></div></div><div className="dashboard-backlog-ok"><strong>Demo Email Cleanup: Complete</strong><span>{systemStatus?.queue?.total??0} queued records remain. Automatic email delivery is OFF.</span></div></article>
 
    <article className="dashboard-admin-card"><div className="dashboard-admin-card-head"><div><span>RELEASE HISTORY</span><h3>Deployment lineage</h3></div><a href="/version-history">Open</a></div><div className="dashboard-release-list">{currentVersion?<div><span>Current Release</span><strong>v{currentVersion.version||'—'} · {currentVersion.title||'Release'}</strong><small>{currentVersion.release_date||'Date unavailable'}</small></div>:<p>No release history loaded.</p>}{previousVersion&&<div><span>Previous Release</span><strong>v{previousVersion.version||'—'} · {previousVersion.title||'Release'}</strong><small>{previousVersion.release_date||'Date unavailable'}</small></div>}<div><span>Environment</span><strong>Production · Vercel</strong><small>GitHub + Vercel + Supabase only</small></div></div></article>
 

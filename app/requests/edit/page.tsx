@@ -54,7 +54,7 @@ export default function TrainingRequestEditPage(){
 
  async function initialize(){
   const {data}=await supabase.auth.getUser();
-  if(!data.user){setError('Administrator sign-in is required.');setReady(true);return;}
+  if(!data.user){setError('Sign in through Training Administration to edit Training Requests.');setReady(true);return;}
   setUser(data.user);
   const {data:row,error:profileError}=await supabase.from('profiles').select('role,active').eq('id',data.user.id).maybeSingle();
   if(profileError||!row?.active){setError('Your active profile could not be verified.');setReady(true);return;}
@@ -160,7 +160,7 @@ export default function TrainingRequestEditPage(){
  const advanced=form.refresher_course||form.advanced_training;
  const groupedModules=[['advanced','Advanced Training Tools'],['dashboard','Dashboard Training Tools'],['smart','Smart Tools Training']] as const;
 
- if(!ready)return <main className="shell"><section className="card"><h1>Edit Training Requests</h1><p>Checking administrator permissions…</p></section></main>;
+ if(!ready)return <main className="shell"><section className="card"><h1>Edit Training Requests</h1><p>Checking Training Administration access…</p></section></main>;
  if(error&&!requests.length)return <main className="shell"><section className="card"><h1>Edit Training Requests</h1><p>{error}</p><a href="/">Return to dashboard</a></section></main>;
 
  return <main className="shell request-edit-page"><header className="header"><div><div className="brand">Edit Training Requests</div><div className="subtitle">Role: {profile?.role||'Unassigned'} · completed records remain locked</div></div><a href="/">Back to dashboard</a></header>

@@ -30,3 +30,5 @@
 .public-problem-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 
 .notification-nav{display:inline-flex!important;align-items:center;gap:6px}.notification-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#b42318;color:#fff;font-size:10px;font-weight:900;line-height:1}.main-nav a.active .notification-badge{background:#fff;color:#173861}.notification-unread-row td{font-weight:600;background:#f7faff}.notification-actions{display:flex;gap:6px;flex-wrap:wrap}.notification-actions button{white-space:nowrap}
+
+.schedule-panel{margin:18px 0;padding:16px;border:1px solid #c8d7ea;border-radius:10px;background:#f7faff}.schedule-panel h3{margin:0 0 4px;color:#173861}.schedule-panel .controls{margin-top:12px}.schedule-panel>button{margin-top:10px;background:#2b62b5;color:#fff;border:0;border-radius:7px;padding:10px 14px;font-weight:800}.schedule-panel>button:disabled{opacity:.55}

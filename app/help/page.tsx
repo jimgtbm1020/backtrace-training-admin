@@ -1,6 +1,7 @@
 'use client';
 
 import {useMemo,useState} from 'react';
+import HelpTip from '../components/help-tip';
 
 type GuideSection={
   title:string;
@@ -46,7 +47,7 @@ export default function HelpPage(){
  const [search,setSearch]=useState('');
  const filtered=useMemo(()=>{const term=search.trim().toLowerCase();return sections.filter(section=>!term||[section.title,section.audience,section.summary,...section.steps,section.note||''].join(' ').toLowerCase().includes(term));},[search]);
  return <main className="shell app-guide-page">
-  <header className="legacy-page-header app-guide-header"><div><span className="library-eyebrow">BACKTRACE TRAINING ADMINISTRATION</span><h1>App User Guide</h1><p>Updated operational guide for Training Administration v2.1.15.</p></div><div className="app-guide-actions"><button onClick={()=>window.print()}>Print Guide</button><a href="/">Back to Dashboard</a></div></header>
+  <header className="legacy-page-header app-guide-header"><div><span className="library-eyebrow">BACKTRACE TRAINING ADMINISTRATION</span><h1 className="help-heading">App User Guide<HelpTip text="Use this searchable guide for complete workflows. The question-mark icons throughout the application provide shorter page-specific guidance."/></h1><p>Updated operational guide for Training Administration v2.1.15.</p></div><div className="app-guide-actions"><button onClick={()=>window.print()}>Print Guide</button><a href="/">Back to Dashboard</a></div></header>
 
   <section className="app-guide-intro"><div><strong>Core workflow</strong><p>Request → assign/schedule → generate class → attendance/check-in → close/finalize → certificates/history.</p></div><div><strong>Protected production state</strong><p>Release writes remain protected. Use System Status and Email Settings for the live communications state.</p></div></section>
 

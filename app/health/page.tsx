@@ -2,7 +2,6 @@
 
 import {useEffect,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
-import HelpTip from '../components/help-tip';
 
 type SystemStatus={
   app?:{version?:string|null;release_date?:string|null};
@@ -70,7 +69,7 @@ export default function HealthPage(){
 
   return <main className="shell system-status-page">
     <header className="legacy-page-header">
-      <div><h1 className="help-heading">System Status<HelpTip text="This page is read-only. It shows the live release, communications, queue, background-job, and connectivity state without changing any setting."/></h1><p>Read-only release, communications, queue-protection and connectivity visibility.</p></div>
+      <div><h1>System Status</h1><p>Read-only release, communications, queue-protection and connectivity visibility.</p></div>
       <button disabled={loadingStatus} onClick={()=>void initialize()}>{loadingStatus?'Refreshing…':'Refresh Status'}</button>
     </header>
 
@@ -90,7 +89,7 @@ export default function HealthPage(){
       <div>
         <span>Email Queue</span>
         <strong>{status?.queue?.total??0} queued record{(status?.queue?.total??0)===1?'':'s'} · {status?.queue?.pending??0} pending</strong>
-        <p>{(status?.queue?.total??0)===0?'Demo email records were intentionally removed. The queue is currently empty.':status?.communications?.email_delivery_enabled?'Queued records are eligible for automatic delivery. Review recipients and status.':'Queued records are retained for review while automatic email delivery remains disabled.'}</p>
+        <p>{(status?.queue?.total??0)===0?'Demo email records were intentionally removed. The queue is currently empty.':'Queued records are retained for review while automatic email delivery remains disabled.'}</p>
       </div>
       <span className="system-state system-state-ok">{(status?.queue?.total??0)===0?'EMPTY':'REVIEW'}</span>
     </section>
@@ -98,10 +97,10 @@ export default function HealthPage(){
     <section className="legacy-panel">
       <div className="panel-heading"><div><h2>Communications Safety</h2><span>Live database state</span></div></div>
       <div className="system-safety-grid">
-        <div><span>Email Delivery</span><OnOff value={status?.communications?.email_delivery_enabled} healthyWhen={true}/><small>Authorized live state</small></div>
+        <div><span>Email Delivery</span><OnOff value={status?.communications?.email_delivery_enabled}/><small>Must remain OFF</small></div>
         <div><span>Webhooks</span><OnOff value={status?.communications?.webhook_enabled}/><small>Must remain OFF</small></div>
         <div><span>Tracking</span><OnOff value={status?.communications?.tracking_enabled}/><small>Must remain OFF</small></div>
-        <div><span>Email Delivery Cron</span><OnOff value={status?.communications?.email_delivery_cron_active} healthyWhen={Boolean(status?.communications?.email_delivery_enabled)}/><small>Should match delivery state</small></div>
+        <div><span>Email Delivery Cron</span><OnOff value={status?.communications?.email_delivery_cron_active}/><small>Must remain OFF</small></div>
         <div><span>Queue Rows</span><strong>{status?.queue?.total??0}</strong><small>{status?.queue?.pending??0} pending</small></div>
         <div><span>Demo Email Cleanup</span><strong>{(status?.queue?.total??0)===0?'Complete':'Review'}</strong><small>Intentional demo records removed</small></div>
       </div>

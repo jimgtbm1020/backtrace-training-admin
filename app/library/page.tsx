@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {createClient,Session} from '@supabase/supabase-js';
 import * as tus from 'tus-js-client';
+import HelpTip from '../components/help-tip';
 
 type Role='admin'|'coordinator'|'trainer'|'viewer';
 type Product={id:string;name:string;active:boolean|null};
@@ -357,7 +358,7 @@ export default function LibraryPage(){
       p_request_id:selectedClassId,p_material_version_ids:selectedVersionIds,p_recipient_emails:recipients,p_expires_days:Number(emailDays)
     });
     if(error)setError(error.message);
-    else{setShowEmail(false);setMessage((data?.queued||0)+' training-material email record'+((data?.queued||0)===1?'':'s')+' queued. Automatic email delivery remains OFF.');}
+    else{setShowEmail(false);setMessage((data?.queued||0)+' training-material email record'+((data?.queued||0)===1?'':'s')+' queued. Delivery follows the live Email Settings state.');}
     setEmailBusy(false);
   }
 
@@ -375,7 +376,7 @@ export default function LibraryPage(){
   if(!auth)return <main className="shell"><section className="card"><h1>Resource Library</h1><p>Sign in through Training Administration to use the Resource Library.</p><a href="/">Return to sign in</a></section></main>;
 
   return <main className="shell resource-library-page">
-    <header className="resource-library-header"><div><div className="library-eyebrow">BACKTRACE</div><h1>Resource Library</h1><p>Upload once, classify resources, assign states, and deliver exact published versions to training classes.</p></div><div className="library-header-actions">{canManage&&<button className="read-only-button" onClick={openNewResource}>Add Resource</button>}<button className="read-only-button" disabled={!materials.length} onClick={downloadCsv}>Export CSV</button></div></header>
+    <header className="resource-library-header"><div><div className="library-eyebrow">BACKTRACE</div><h1 className="help-heading">Resource Library<HelpTip text="Choose the exact published version before attaching or sharing it. Trainer Only files stay internal; Student + Trainer files can use secure links and email distribution."/></h1><p>Upload once, classify resources, assign states, and deliver exact published versions to training classes.</p></div><div className="library-header-actions">{canManage&&<button className="read-only-button" onClick={openNewResource}>Add Resource</button>}<button className="read-only-button" disabled={!materials.length} onClick={downloadCsv}>Export CSV</button></div></header>
 
     {canManage&&selectedVersionIds.length>0&&<section className="resource-selection-bar"><div><strong>{selectedVersionIds.length} selected</strong><span>Select a class to attach, share, or queue the exact published versions shown.</span></div><div className="resource-selection-actions"><select value={selectedClassId} onChange={e=>{setSelectedClassId(e.target.value);setShareUrl('')}}><option value="">Select training class…</option>{classes.map(row=><option key={row.id} value={row.id}>{row.request_number||'Request'} · {row.agency_name||'Agency'}{row.confirmed_date?' · '+row.confirmed_date:''}</option>)}</select><button onClick={()=>void attachSelected()}>Attach to Class</button><button disabled={!shareableSelection} onClick={()=>void copySecureLink()}>Copy Secure Link</button><button className="primary-button" disabled={!shareableSelection} onClick={openEmailDialog}>Email Attendees</button><button onClick={()=>{setSelectedVersionIds([]);setShareUrl('')}}>Clear Selection</button></div>{shareUrl&&<div className="resource-share-result"><strong>Secure link</strong><input readOnly value={shareUrl}/><button onClick={()=>navigator.clipboard?.writeText(shareUrl)}>Copy</button></div>}</section>}
 

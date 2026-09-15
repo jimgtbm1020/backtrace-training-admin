@@ -135,7 +135,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
         <div className={styles.navMenu}>
           <button
             className={triggerClass(
-              ['/requests', '/trainer-workspace', '/calendar', '/today', '/classes', '/completions', '/reports'].some(
+              ['/requests', '/request-training', '/trainer-workspace', '/calendar', '/today', '/classes', '/completions', '/reports'].some(
                 (path) => pathname.startsWith(path),
               ),
             )}
@@ -149,6 +149,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
             <div className={styles.dropdown}>
               <div className={styles.sectionTitle}>Workspace</div>
               <a className={itemClass('/requests')} href="/requests">Training Requests</a>
+              <a className={itemClass('/request-training')} href="/request-training">Training Request Form</a>
               <a className={itemClass('/trainer-workspace')} href="/trainer-workspace">Trainer Workspace</a>
               <a className={itemClass('/calendar')} href="/calendar">Calendar</a>
               <a className={itemClass('/today')} href="/today">Today</a>

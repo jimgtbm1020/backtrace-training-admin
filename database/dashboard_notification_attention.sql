@@ -14,7 +14,7 @@ begin
           and lower(coalesce(r.status,'')) not in ('completed','closed','archived','cancelled','finalized')
           and lower(coalesce(r.class_status,'')) not in ('closed','completed','archived','cancelled','finalized') as live_request,
         r.class_status,
-        coalesce((select name from pg_catalog.pg_timezone_names where name=r.time_zone limit 1),'America/New_York') as zone
+        case r.time_zone when 'Central' then 'America/Chicago' when 'Mountain' then 'America/Denver' when 'Pacific' then 'America/Los_Angeles' else 'America/New_York' end as zone
       from public.training_notifications n
       left join public.training_requests r on r.id=n.request_id
       where n.user_id=auth.uid()

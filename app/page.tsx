@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import {createClient,Session} from '@supabase/supabase-js';
+import NotificationAttention from './components/notification-attention';
 
 type Role='admin'|'coordinator'|'trainer'|'viewer';
 type Request={id:string;agency_name:string|null;preferred_date:string|null;confirmed_date:string|null;status:string|null;class_status:string|null;assigned_trainer_id:string|null;};
@@ -39,6 +40,7 @@ export default function Home(){
 
  return <main className="app-shell"><section className="dashboard"><h1>Training Administration Dashboard</h1><p className="lead">Shared operational view of requests, scheduling, agencies and training activity.</p>
  {error&&<div role="alert" className="error"><p>Dashboard data could not be loaded: {error}</p><button onClick={()=>{setError('');void loadProfile(session.user.id);void loadDashboard();}}>Retry dashboard</button></div>}
+ {(role==='admin'||role==='trainer')&&<NotificationAttention key={session.user.id} client={supabase} userId={session.user.id}/>}
  <div className="metrics"><div><label>OPEN REQUESTS</label><strong>{error?'—':open.length}</strong></div><div><label>RECEIVED</label><strong>{error?'—':requests.length}</strong></div><div><label>UPCOMING 30 DAYS</label><strong>{error?'—':upcoming.length}</strong></div><div><label>UNASSIGNED</label><strong>{error?'—':open.filter(r=>!r.assigned_trainer_id).length}</strong></div><div><label>ACTIVE AGENCIES</label><strong>{error?'—':activeAgencyCount}</strong></div></div>
  <div className="dashboard-columns"><section className="dashboard-panel"><h2>Upcoming Training</h2>{upcoming.length?<div className="upcoming-list">{upcoming.map(r=><div className="upcoming-row" key={r.id}><strong>{r.confirmed_date}</strong><span>{r.agency_name||'Agency not specified'}</span></div>)}</div>:<p className="empty-state">{error?'Upcoming training is unavailable until the connection is restored.':'No upcoming training in the next 30 days.'}</p>}</section><section className="dashboard-panel"><h2>Quick Actions</h2><div className="quick-grid">{[['Today','Open Today','/today'],['Requests','Open Requests','/requests'],['Attendance','Open Attendance','/classes'],['Attendees','Open Attendees','/attendees'],['Agency History','Open Agency History','/agency-history'],['Completion','Open Completion','/completions']].map(([a,b,c])=><a href={c} key={a}><strong>{a}</strong><span>{b}</span></a>)}</div></section></div>
 

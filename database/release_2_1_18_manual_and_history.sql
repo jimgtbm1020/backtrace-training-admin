@@ -1,4 +1,7 @@
 begin;
+lock table public.training_app_versions,public.training_app_version_changes in share row exclusive mode;
+select setval('public.training_app_versions_id_seq',greatest((select last_value from public.training_app_versions_id_seq),(select coalesce(max(id),1) from public.training_app_versions)),true);
+select setval('public.training_app_version_changes_id_seq',greatest((select last_value from public.training_app_version_changes_id_seq),(select coalesce(max(id),1) from public.training_app_version_changes)),true);
 update public.training_app_versions set is_current=false where is_current=true;
 insert into public.training_app_versions(version,release_date,title,summary,is_current)
 values('2.1.18','2026-10-06','Bug Tracking and Training Workflow Updates','Adds ticket references, priority, assigned ownership, status tracking, resolution summaries, and change history. Includes trainer acceptance and Teams links, live communications status, and certificate preservation fixes. The user guide and manual now document the current workflow.',true)

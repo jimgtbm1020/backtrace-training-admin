@@ -1,0 +1,48 @@
+begin;
+do $$
+declare admin_id uuid;other_id uuid;ticket jsonb;ticket_id uuid;stamp timestamptz;result jsonb;blocked boolean;
+begin
+ select id into admin_id from public.profiles where active and role='admin' limit 1;
+ select id into other_id from public.profiles where active and id<>admin_id limit 1;
+ if admin_id is null then raise exception 'Test requires an active administrator';end if;
+ perform set_config('request.jwt.claim.sub','',true);
+ ticket:=public.submit_training_bug_report('{"summary":"QA rollback tracker test","details":"Steps to reproduce the QA issue","contact_email":"qa@example.invalid","status":"Closed","priority":"Critical","admin_notes":"must be ignored"}');
+ ticket_id:=(ticket->>'id')::uuid;
+ if ticket->>'issue_number' !~ '^BT-BUG-[0-9]{6,}$' then raise exception 'Missing ticket number';end if;
+ if not exists(select 1 from public.training_bug_reports where id=ticket_id and status='Open' and priority='Normal' and admin_notes is null and app_version is not null) then raise exception 'Submission defaults/version failed';end if;
+ if (select count(*) from public.training_bug_report_history where bug_report_id=ticket_id)<>1 then raise exception 'Submission history missing';end if;
+ blocked:=false;
+ begin perform public.update_training_bug_report(ticket_id,'In Review','High',admin_id,'notes',null,now());exception when others then blocked:=position('Administrator access' in sqlerrm)>0;end;
+ if not blocked then raise exception 'Anonymous update permitted';end if;
+ perform set_config('request.jwt.claim.sub',admin_id::text,true);
+ select updated_at into stamp from public.training_bug_reports where id=ticket_id;
+ result:=public.update_training_bug_report(ticket_id,'In Review','High',admin_id,'Private investigation notes',null,stamp);
+ if not exists(select 1 from public.training_bug_reports where id=ticket_id and assigned_to=admin_id and priority='High' and status='In Review') then raise exception 'Triage failed';end if;
+ blocked:=false;
+ begin perform public.update_training_bug_report(ticket_id,'Resolved','High',admin_id,'notes','Fixed',stamp);exception when others then blocked:=position('changed since' in sqlerrm)>0;end;
+ if not blocked then raise exception 'Stale write permitted';end if;
+ select updated_at into stamp from public.training_bug_reports where id=ticket_id;
+ blocked:=false;
+ begin perform public.update_training_bug_report(ticket_id,'Resolved','High',admin_id,'notes',' ',stamp);exception when others then blocked:=position('resolution summary' in sqlerrm)>0;end;
+ if not blocked then raise exception 'Empty resolution permitted';end if;
+ perform public.update_training_bug_report(ticket_id,'Resolved','High',admin_id,'Private investigation notes','Fixed reproduction steps',stamp);
+ if not exists(select 1 from public.training_bug_reports where id=ticket_id and resolved_at is not null and resolved_by=admin_id) then raise exception 'Resolution metadata missing';end if;
+ select updated_at into stamp from public.training_bug_reports where id=ticket_id;
+ perform public.update_training_bug_report(ticket_id,'Open','Normal',null,'Private investigation notes','Reopened after retest',stamp);
+ if not exists(select 1 from public.training_bug_reports where id=ticket_id and resolved_at is null and resolved_by is null) then raise exception 'Reopen did not clear resolution time';end if;
+ blocked:=false;
+ begin update public.training_bug_reports set summary='tampered submission' where id=ticket_id;exception when others then blocked:=position('cannot be changed' in sqlerrm)>0;end;
+ if not blocked then raise exception 'Submission content mutable';end if;
+ if (select count(*) from public.training_bug_report_history where bug_report_id=ticket_id)<>4 then raise exception 'History count incorrect';end if;
+ ticket:=public.submit_training_bug_report('{"summary":"QA signed-in tracker test","details":"Signed-in reporter status visibility"}');
+ if not exists(select 1 from public.get_my_training_bug_reports() where id=(ticket->>'id')::uuid) then raise exception 'Reporter cannot see own report';end if;
+ if exists(select 1 from public.get_my_training_bug_reports() where id=ticket_id) then raise exception 'Reporter sees anonymous report';end if;
+ if other_id is not null then
+ perform set_config('request.jwt.claim.sub',other_id::text,true);
+ if exists(select 1 from public.get_my_training_bug_reports() where id=(ticket->>'id')::uuid) then raise exception 'Other reporter sees ticket';end if;
+ end if;
+ if has_function_privilege('anon','public.update_training_bug_report(uuid,text,text,uuid,text,text,timestamptz)','EXECUTE') then raise exception 'Anon update RPC permission';end if;
+ if has_function_privilege('anon','public.get_my_training_bug_reports()','EXECUTE') then raise exception 'Anon personal reports permission';end if;
+ raise notice 'PASS: ticket receipt, submission defaults/version, history, auth, triage, stale writes, resolution requirement, reopen, immutable submission, reporter isolation and privileges';
+end $$;
+rollback;

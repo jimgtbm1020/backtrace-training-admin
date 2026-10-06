@@ -209,7 +209,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
           <div className={styles.navMenu}>
             <button
               className={triggerClass(
-                ['/account', '/user-management', '/activity', '/bug-reports', '/request-activity', '/health', '/email-settings'].some(
+                ['/account', '/user-management', '/activity', '/bug-reports', '/request-activity', '/health', '/email-settings', '/test-data-cleanup'].some(
                   (path) => pathname.startsWith(path),
                 ),
               )}
@@ -229,6 +229,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
                 <a className={itemClass('/request-activity')} href="/request-activity">Request Activity</a>
                 <a className={itemClass('/email-settings')} href="/email-settings">Email Settings</a>
                 <a className={itemClass('/health')} href="/health">System Status</a>
+                <a className={itemClass('/test-data-cleanup')} href="/test-data-cleanup">Test Data Cleanup</a>
               </div>
             )}
           </div>

@@ -8,7 +8,7 @@ begin
   end if;
   return (
     with owned as materialized (
-      select n.*, r.assigned_trainer_id,r.trainer_response,r.confirmed_date,r.confirmed_start_time,
+      select n.*,row_number() over (partition by n.request_id,n.notification_type order by n.created_at desc,n.id desc) as notification_rank, r.assigned_trainer_id,r.trainer_response,r.confirmed_date,r.confirmed_start_time,
         r.created_at as request_created_at,r.total_minutes,
         r.id is not null and r.archived_at is null
           and lower(coalesce(r.status,'')) not in ('completed','closed','archived','cancelled','finalized')
@@ -20,10 +20,10 @@ begin
       where n.user_id=auth.uid()
     ), classified as materialized (
       select o.*,
-        coalesce(o.live_request and case
+        coalesce(o.live_request and o.notification_rank=1 and case
           when o.notification_type='assignment' then
             (v_role='trainer' and o.assigned_trainer_id=auth.uid() and o.trainer_response='Pending' and o.class_status<>'In Progress')
-            or (v_role='admin' and o.trainer_response='Declined')
+            or (v_role='admin' and o.trainer_response='Declined' and o.severity='warning')
           when o.notification_type='unassigned' then v_role='admin' and o.assigned_trainer_id is null
           when o.notification_type='unscheduled' then v_role='admin' and o.confirmed_date is null
           when o.notification_type='schedule_conflict' then exists (

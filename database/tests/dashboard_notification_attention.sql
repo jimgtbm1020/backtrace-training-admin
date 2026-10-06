@@ -55,18 +55,18 @@ begin
  summary:=public.get_dashboard_notification_attention();
  if exists(select 1 from jsonb_array_elements(summary->'items') i where i->>'title' in ('QA missing assignment','QA missing schedule')) then raise exception 'Resolved manager needs still open';end if;
  execute 'reset role';
- -- A read schedule conflict clears after the overlap is removed.
+ -- Stale conflict notices do not stay open after schedules no longer overlap.
  insert into public.training_requests(agency_name,basic_training,trainer_contact_name,trainer_contact_email,trainer_contact_phone,created_by,updated_by,assigned_trainer_id,confirmed_date,confirmed_start_time,total_minutes)
  values('Dashboard attention rollback conflict A',true,'QA Contact','qa@example.invalid','555-0100',a,a,t,current_date+20,'09:00',240) returning id into c;
  insert into public.training_requests(agency_name,basic_training,trainer_contact_name,trainer_contact_email,trainer_contact_phone,created_by,updated_by,assigned_trainer_id,confirmed_date,confirmed_start_time,total_minutes)
- values('Dashboard attention rollback conflict B',true,'QA Contact','qa@example.invalid','555-0100',a,a,t,current_date+20,'10:00',240) returning id into d;
+ values('Dashboard attention rollback conflict B',true,'QA Contact','qa@example.invalid','555-0100',a,a,t,current_date+20,'17:00',240) returning id into d;
  insert into public.training_notifications(user_id,request_id,notification_type,title,message,severity,action_url,dedupe_key,read_at,created_at)
  values(a,c,'schedule_conflict','QA read conflict','Overlap still needs correction','critical','/calendar','dashboard-qa-conflict',now(),now()+interval '6 days') returning id into n;
  execute 'set local role authenticated';
  summary:=public.get_dashboard_notification_attention();
- if not exists(select 1 from jsonb_array_elements(summary->'items') i where (i->>'id')::bigint=n and (i->>'action_pending')::boolean) then raise exception 'Read conflict missing';end if;
+ if exists(select 1 from jsonb_array_elements(summary->'items') i where (i->>'id')::bigint=n) then raise exception 'Non-overlapping read conflict falsely open';end if;
  execute 'reset role';
- update public.training_requests set confirmed_start_time='17:00' where id=d;
+ update public.training_requests set confirmed_start_time='18:00' where id=d;
  execute 'set local role authenticated';
  summary:=public.get_dashboard_notification_attention();
  if exists(select 1 from jsonb_array_elements(summary->'items') i where (i->>'id')::bigint=n) then raise exception 'Resolved conflict still open';end if;

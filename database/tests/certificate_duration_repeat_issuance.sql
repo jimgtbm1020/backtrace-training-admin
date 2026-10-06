@@ -1,0 +1,32 @@
+begin;
+do $$
+declare a uuid;t uuid;r uuid;attendee uuid;payload jsonb;cert jsonb;
+begin
+select id into a from public.profiles where active and role='admin' limit 1;
+select id into t from public.profiles where active and role='trainer' order by id limit 1;
+perform set_config('request.jwt.claim.sub',a::text,true);
+perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);
+payload:=jsonb_build_object('agency_name','QA Certificate Rollback','agency_address','1 Test Street','city_state_zip','Test City, NJ 07001','contact_person','QA Contact','contact_phone','(201) 555-0123','contact_email','qa@example.invalid','trainer_contact_name','QA Coordinator','trainer_contact_email','qa@example.invalid','trainer_contact_phone','(201) 555-0123','requested_by','QA Test','preferred_date',current_date+7,'training_format','Virtual','estimated_attendees',1,'basic_training',true,'train_the_trainer',false,'refresher_course',false,'advanced_training',false,'time_zone','Eastern','training_resources','[]'::jsonb);
+r:=public.save_training_request(null,payload,'{}'::bigint[]);
+perform public.set_training_schedule(r,current_date+7,'09:00',t);
+perform set_config('request.jwt.claim.sub',t::text,true);
+perform public.respond_to_training_assignment(r,'Accepted',null);
+perform public.set_training_request_teams_link(r,'https://teams.microsoft.com/l/meetup-join/test');
+perform public.create_training_attendance_link(r);
+attendee:=public.add_training_attendee(r,'QA Attendee','qa-attendee@example.invalid','QA-TEST','Officer',true);
+perform public.start_training_class(r);
+perform public.close_training_class(r);
+perform public.save_training_completion(r,jsonb_build_object('actual_training_date',current_date+7,'actual_start_time','09:00','actual_end_time','13:00','actual_minutes',240,'actual_attendees',1,'basic_training_completed',true),'{}'::bigint[],true);
+perform set_config('qa.certificate_before',(select to_jsonb(x)::text from public.training_attendees x where id=attendee),true);
+perform set_config('qa.email_count_before',(select count(*)::text from public.training_certificate_email_deliveries where attendee_id=attendee),true);
+perform public.set_training_attendee_completion(attendee,true);
+perform public.set_training_attendee_completion(attendee,true);
+if (select to_jsonb(x)::text from public.training_attendees x where id=attendee)<>current_setting('qa.certificate_before') then raise exception 'Repeat issuance changed certificate record';end if;
+if (select count(*)::text from public.training_certificate_email_deliveries where attendee_id=attendee)<>current_setting('qa.email_count_before') then raise exception 'Repeat issuance duplicated email';end if;
+if (select certificate_training_type_snapshot from public.training_attendees where id=attendee)<>'Basic Backtrace Search Techniques (4 Hours)' then raise exception 'Wrong Basic certificate label';end if;
+select jsonb_build_object('training_type',certificate_training_type_snapshot,'total_minutes',certificate_total_minutes_snapshot,'certificate_created',certificate_public_id is not null,'class_status',(select class_status from public.training_requests where id=r),'email_queued',exists(select 1 from public.training_certificate_email_deliveries where attendee_id=attendee)) into cert from public.training_attendees where id=attendee;
+perform set_config('qa.certificate_result',cert::text,true);
+set constraints all immediate;
+end $$;
+select current_setting('qa.certificate_result')::jsonb as result;
+rollback;

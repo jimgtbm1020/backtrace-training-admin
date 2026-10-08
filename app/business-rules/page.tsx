@@ -4,12 +4,13 @@ import {FormEvent,useEffect,useRef,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 import {Agency,Item,Assignment,agencyAddress,agencyLocation} from './types';
 import styles from './rules.module.css';
+import AssignmentWorkspace from './assignment-workspace';
 import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency Item Assignment'],['report','Agency Business Rules Report']] as const;
 type Tab=typeof tabs[number][0];
-const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency and assign a tool, then record that agency’s data source and retention period. Existing assignments appear below.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
+const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency once, select multiple tools, and save their individual data sources and retention periods together. Use Assigned to review or edit existing rules.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
 const blankAgency={agency_name:'',agency_address:'',agency_city:'',agency_state:'',agency_zip:'',city_state_zip:''};
 const blankItem={name:'',item_type:'Tool',description:'',expected_outcome:''};
 
@@ -25,14 +26,11 @@ export default function AgencyBusinessRulesPage(){
  const [tab,setTab]=useState<Tab>('agencies'),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  const [agencyForm,setAgencyForm]=useState(blankAgency),[editingAgency,setEditingAgency]=useState<Agency|null>(null);
  const [itemForm,setItemForm]=useState(blankItem),[editingItem,setEditingItem]=useState<Item|null>(null);
- const [agencyId,setAgencyId]=useState(''),[itemId,setItemId]=useState(''),[reportAgencyId,setReportAgencyId]=useState('');
- const [source,setSource]=useState(''),[retention,setRetention]=useState('90'),[unit,setUnit]=useState('Days');
+ const [agencyId,setAgencyId]=useState(''),[reportAgencyId,setReportAgencyId]=useState('');
  const importInput=useRef<HTMLInputElement>(null);const [importRows,setImportRows]=useState<ImportRow[]>([]);const [importFile,setImportFile]=useState('');
  const importPreview=previewAgencies(importRows,agencies);
  const canManage=role==='admin'||role==='coordinator';
- const agency=agencies.find(a=>a.id===agencyId),reportAgency=agencies.find(a=>a.id===reportAgencyId);
- const selectedAssignment=assignments.find(a=>a.agency_id===agencyId&&a.item_id===itemId);
- const agencyAssignments=assignments.filter(a=>a.agency_id===agencyId);
+ const reportAgency=agencies.find(a=>a.id===reportAgencyId);
  const reportAssignments=assignments.filter(a=>a.agency_id===reportAgencyId).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
 
  async function load(){
@@ -43,7 +41,7 @@ export default function AgencyBusinessRulesPage(){
     allRows<Item>((from,to)=>supabase.from('resource_items').select('id,name,item_type,description,expected_outcome,updated_at').order('name').order('id').range(from,to)),
     allRows<Assignment>((from,to)=>supabase.from('agency_item_assignments').select('id,agency_id,item_id,data_source,retention_value,retention_unit,updated_at').order('id').range(from,to))
    ]);
-   setAgencies(a);setItems(i);setAssignments(s);setAgencyId(value=>a.some(x=>x.id===value)?value:a.find(x=>x.active)?.id||a[0]?.id||'');setItemId(value=>i.some(x=>x.id===value)?value:i[0]?.id||'');setReportAgencyId(value=>a.some(x=>x.id===value)?value:a[0]?.id||'');
+   setAgencies(a);setItems(i);setAssignments(s);setAgencyId(value=>a.some(x=>x.id===value)?value:a.find(x=>x.active)?.id||a[0]?.id||'');setReportAgencyId(value=>a.some(x=>x.id===value)?value:a[0]?.id||'');
    return true;
   }catch(e){setError(e instanceof Error?e.message:'Unable to load business rules.');return false;}finally{setLoading(false);}
  }
@@ -63,7 +61,6 @@ export default function AgencyBusinessRulesPage(){
   const {data:listener}=supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){setAccess('denied');setRole('');setAgencies([]);setItems([]);setAssignments([]);}});
   return()=>{mounted=false;listener.subscription.unsubscribe();};
  },[]);
- useEffect(()=>{setSource(selectedAssignment?.data_source||'');setRetention(String(selectedAssignment?.retention_value||90));setUnit(selectedAssignment?.retention_unit||'Days');},[selectedAssignment,agencyId,itemId]);
 
  function editAgency(row:Agency){setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,agency_address:row.agency_address||'',agency_city:row.agency_city||'',agency_state:row.agency_state||'',agency_zip:row.agency_zip||'',city_state_zip:row.city_state_zip||''});setTab('agencies');setMessage('');}
  function editItem(row:Item){setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
@@ -100,20 +97,17 @@ export default function AgencyBusinessRulesPage(){
    const result=editingItem?await supabase.from('resource_items').update(payload).eq('id',editingItem.id).eq('updated_at',editingItem.updated_at).select('id').maybeSingle():await supabase.from('resource_items').insert({...payload,created_by:userId}).select('id').single();
    if(result.error)throw new Error(result.error.code==='23505'?'This item name and type already exist. Edit the saved item below.':result.error.message);
    if(!result.data)throw new Error('This item changed or is unavailable. Refresh and review it before saving.');
-   setEditingItem(null);setItemForm(blankItem);if(await load()){setItemId(result.data.id);setMessage('Item saved.');}
+   setEditingItem(null);setItemForm(blankItem);if(await load()){setMessage('Item saved.');}
   }catch(e){setError(e instanceof Error?e.message:'Unable to save item.');}finally{setBusy(false);}
  }
- async function saveAssignment(event:FormEvent){
-  event.preventDefault();if(!canManage||busy||loading)return;setBusy(true);setError('');setMessage('');
+ async function saveAssignments(rows:{item_id:string;data_source:string;retention_value:string;retention_unit:string;expected_updated_at:string|null}[]){
+  if(!canManage||busy||loading||!rows.length)return false;setBusy(true);setError('');setMessage('');
   try{
-   const value=Number(retention);if(!agency?.active||!items.some(i=>i.id===itemId))throw new Error('Choose an active agency and a saved item.');
-   if(!source.trim()||!Number.isInteger(value)||value<1||value>9999)throw new Error('Enter a data source and a whole retention period from 1 to 9999.');
-   const payload={agency_id:agencyId,item_id:itemId,data_source:source.trim(),retention_value:value,retention_unit:unit,updated_by:userId};
-   const result=selectedAssignment?await supabase.from('agency_item_assignments').update(payload).eq('id',selectedAssignment.id).eq('updated_at',selectedAssignment.updated_at).select('id').maybeSingle():await supabase.from('agency_item_assignments').insert({...payload,created_by:userId}).select('id').single();
-   if(result.error)throw new Error(result.error.code==='23505'?'This assignment was saved by another user. Refresh and review it before saving.':result.error.message);
-   if(!result.data)throw new Error('This assignment changed or is unavailable. Refresh and review it before saving.');
-   if(await load())setMessage('Agency item assignment saved.');
-  }catch(e){setError(e instanceof Error?e.message:'Unable to save assignment.');}finally{setBusy(false);}
+   const {error:saveError}=await supabase.rpc('save_business_rule_assignments',{p_agency_id:agencyId,p_rows:rows.map(r=>({...r,data_source:r.data_source.trim(),retention_value:Number(r.retention_value)}))});
+   if(saveError)throw new Error(saveError.message);
+   const refreshed=await load();if(refreshed)setMessage(`${rows.length} assignment${rows.length===1?'':'s'} saved.`);else setError('Assignments saved, but records could not refresh. Refresh records before editing again.');
+   return true;
+  }catch(e){setError(e instanceof Error?e.message:'Unable to save assignments. No assignments were saved.');return false;}finally{setBusy(false);}
  }
  async function exportPdf(){
   if(!reportAgency||loading||busy||error)return;setBusy(true);setMessage('');
@@ -154,16 +148,8 @@ export default function AgencyBusinessRulesPage(){
   </section>
   <section id="rules-panel-assign" role="tabpanel" aria-labelledby="rules-tab-assign" hidden={tab!=='assign'}>
    <p className={styles.description}>{descriptions.assign}</p>
-   <form className={styles.panel} onSubmit={saveAssignment}><h2>Attach an agency to an item</h2>
-    <fieldset className={styles.group} disabled={disabled}><legend>Agency Information</legend><label>Agency<select required value={agencyId} onChange={e=>setAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option key={a.id} value={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label>{canManage&&<button type="button" onClick={()=>{setEditingAgency(null);setAgencyForm(blankAgency);setTab('agencies');}}>Create agency</button>}{agency&&<p>{agencyAddress(agency)||'No address saved.'}</p>}</fieldset>
-    <fieldset className={styles.group} disabled={disabled||!canManage}><legend>Tool Assignment</legend><div className={styles.fields}>
-     <label className={styles.full}>Assigned Tool<select required value={itemId} onChange={e=>setItemId(e.target.value)}><option value="">Choose item</option>{items.map(i=><option key={i.id} value={i.id}>{i.name} · {i.item_type}</option>)}</select></label>
-     <label className={styles.full}>Agency data source<input required maxLength={250} value={source} onChange={e=>setSource(e.target.value)}/></label>
-     <label>Data retention period<input type="number" required min={1} max={9999} step={1} value={retention} onChange={e=>setRetention(e.target.value)}/></label>
-     <label>Period unit<select value={unit} onChange={e=>setUnit(e.target.value)}>{['Days','Months','Years'].map(t=><option key={t}>{t}</option>)}</select></label>
-    </div></fieldset>{canManage&&<button className={styles.primary} disabled={disabled||!agency?.active||!itemId} type="submit">{busy?'Saving…':selectedAssignment?'Update assignment':'Save assignment'}</button>}
-   </form>
-   <div className={styles.panel}><h2>Assignments for {agency?.agency_name||'selected agency'}</h2>{agencyAssignments.map(a=>{const item=items.find(i=>i.id===a.item_id);return <div className={styles.row} key={a.id}><div><h3>{item?.name||'Unavailable item'}</h3><p>{item?.item_type} · {a.data_source} · {a.retention_value} {a.retention_unit.toLowerCase()}</p></div>{canManage&&<button disabled={disabled} onClick={()=>{setItemId(a.item_id);setSource(a.data_source);setRetention(String(a.retention_value));setUnit(a.retention_unit);}}>Edit</button>}</div>;})}{!loading&&!agencyAssignments.length&&<p>No items assigned to this agency.</p>}</div>
+   <AssignmentWorkspace key={agencyId} agencyId={agencyId} agencies={agencies} items={items} assignments={assignments} canManage={canManage} disabled={disabled} onAgency={setAgencyId} onSave={saveAssignments}/>
+
   </section>
   <section id="rules-panel-report" role="tabpanel" aria-labelledby="rules-tab-report" hidden={tab!=='report'}>
    <p className={styles.description}>{descriptions.report}</p>

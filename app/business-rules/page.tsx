@@ -64,10 +64,6 @@ export default function AgencyBusinessRulesPage(){
 
  function editAgency(row:Agency){setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,agency_address:row.agency_address||'',agency_city:row.agency_city||'',agency_state:row.agency_state||'',agency_zip:row.agency_zip||'',city_state_zip:row.city_state_zip||''});setTab('agencies');setMessage('');}
  function editItem(row:Item){setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
- function downloadTemplate(){
-  const url=URL.createObjectURL(new Blob(['Agency Name,Street Address,City,State,ZIP\r\n'],{type:'text/csv;charset=utf-8'}));
-  const a=document.createElement('a');a.href=url;a.download='agency-import-template.csv';a.click();URL.revokeObjectURL(url);
- }
  async function previewImport(file:File){
   setError('');setMessage('');setImportRows([]);setImportFile('');
   try{if(file.size>1024*1024)throw new Error('Choose a CSV smaller than 1 MB.');const rows=parseAgencyCsv(await file.text());setImportRows(rows);setImportFile(file.name);}catch(e){setError(e instanceof Error?e.message:'Unable to read CSV.');}
@@ -123,7 +119,7 @@ export default function AgencyBusinessRulesPage(){
   {message&&<p role="status" aria-live="polite">{message}</p>}{loading&&<p role="status">Loading saved records…</p>}
   <section id="rules-panel-agencies" role="tabpanel" aria-labelledby="rules-tab-agencies" hidden={tab!=='agencies'}>
    <p className={styles.description}>{descriptions.agencies}</p>
-   {canManage&&<form className={styles.panel} onSubmit={saveAgency}><div className={styles.importHeading}><h2>{editingAgency?'Edit agency':'Create agency'}</h2><button type="button" disabled={disabled} onClick={()=>importInput.current?.click()}>Import Data</button></div><input ref={importInput} type="file" accept=".csv,text/csv" hidden aria-label="Agency import CSV" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void previewImport(file);}}/><p className={styles.description}>Import agencies from CSV. <button type="button" disabled={disabled} onClick={downloadTemplate}>Download template</button> · Name and address only. Existing agencies are skipped.</p><fieldset className={styles.fields} disabled={disabled}>
+   {canManage&&<form className={styles.panel} onSubmit={saveAgency}><div className={styles.importHeading}><h2>{editingAgency?'Edit agency':'Create agency'}</h2></div><input ref={importInput} type="file" accept=".csv,text/csv" hidden aria-label="Agency import CSV" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void previewImport(file);}}/><p className={styles.description}><button type="button" disabled={disabled} onClick={()=>importInput.current?.click()}>Upload CSV</button> Choose your agency CSV to preview and import records. Required columns: Agency Name, Street Address, City, State, ZIP. Existing agencies are skipped.</p><fieldset className={styles.fields} disabled={disabled}>
     <label className={styles.full}>Agency name<input required maxLength={160} value={agencyForm.agency_name} onChange={e=>setAgencyForm({...agencyForm,agency_name:e.target.value})}/></label>
     <label className={styles.full}>Street address<input maxLength={250} value={agencyForm.agency_address} onChange={e=>setAgencyForm({...agencyForm,agency_address:e.target.value})}/></label>
     <label>City<input maxLength={120} value={agencyForm.agency_city} onChange={e=>setAgencyForm({...agencyForm,agency_city:e.target.value})}/></label>

@@ -16,7 +16,7 @@ export function parseAgencyCsv(text:string):ImportRow[]{
  if(rows.length<2)throw new Error('The CSV needs a header and at least one agency.');
  const expected=['Agency Name','Street Address','City','State','ZIP'];
  const headers=rows.shift()!.map(x=>x.toLowerCase());
- if(headers.length!==5||expected.some(h=>!headers.includes(h.toLowerCase())))throw new Error('Use the template columns: Agency Name, Street Address, City, State, ZIP.');
+ if(headers.length!==5||expected.some(h=>!headers.includes(h.toLowerCase())))throw new Error('Use the CSV columns: Agency Name, Street Address, City, State, ZIP.');
  if(rows.length>500)throw new Error('Import up to 500 agencies at a time.');
  return rows.map((r,i)=>{
   if(r.length!==headers.length)throw new Error(`Row ${i+2}: expected five fields.`);

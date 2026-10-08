@@ -401,7 +401,7 @@ Application page: /library/business-rules
 10. If another user changes a record while you are editing it, refresh and review the record before saving again.
 11. Administrators can delete known test catalog items and assignments through Test Data Cleanup. Review all linked assignments before confirming deletion. Deleting an agency or item includes its assignments in the reviewed preview.
 
-## Release notes — 2.1.23
+## Release notes — 2.1.22
 
 - Original problem: Resource Library had no saved agency/item registry for agency-specific data sources, retention rules, expected outcomes, or an agency business rules PDF.
 - Fix: Added Agencies, Item catalog, Agency Item Assignment, and Agency Business Rules Report with reusable shared agencies, saved catalog items, agency-specific assignments, filtered lists, page descriptions, compact PDF export, role permissions, and concurrent-edit protection.

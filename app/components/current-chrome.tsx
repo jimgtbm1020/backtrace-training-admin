@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {usePathname} from 'next/navigation';
 import {createClient, Session} from '@supabase/supabase-js';
 import styles from './current-chrome.module.css';
@@ -17,8 +17,10 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   const [menu, setMenu] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<Role | null>(null);
-  const [version, setVersion] = useState('2.1.11');
+  const [version, setVersion] = useState('…');
   const [unread, setUnread] = useState(0);
+  const [profileUserId,setProfileUserId]=useState<string|null>(null);
+  const profileRequest=useRef(0);
 
   useEffect(() => {
     setMenu(null);
@@ -26,33 +28,22 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   }, [pathname]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({data}) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        loadRole(data.session.user.id);
-        loadCurrentVersion();
-        loadUnread();
-      }
-    });
-
-    const {data} = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      if (next?.user) {
-        loadRole(next.user.id);
-        loadCurrentVersion();
-        loadUnread();
-      } else {
-        setRole(null);
-        setUnread(0);
-      }
-    });
-
-    return () => data.subscription.unsubscribe();
+    let mounted=true;
+    const updateSession=(next:Session|null)=>{
+      if(!mounted)return;
+      profileRequest.current++;
+      setSession(next);setRole(null);setProfileUserId(null);
+      if(next?.user){void loadRole(next.user.id);void loadCurrentVersion();void loadUnread();}
+      else setUnread(0);
+    };
+    supabase.auth.getSession().then(({data})=>updateSession(data.session));
+    const {data}=supabase.auth.onAuthStateChange((_event,next)=>updateSession(next));
+    return()=>{mounted=false;profileRequest.current++;data.subscription.unsubscribe();};
   }, []);
 
   useEffect(() => {
     if (!session?.user) return;
-    const refresh = () => void loadUnread();
+    const refresh = () => {void loadUnread();void loadRole(session.user.id);};
     const timer = window.setInterval(refresh, 30000);
     window.addEventListener('focus', refresh);
     window.addEventListener('backtrace-notifications-changed', refresh);
@@ -79,8 +70,11 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   }
 
   async function loadRole(id: string) {
-    const {data} = await supabase.from('profiles').select('role').eq('id', id).maybeSingle();
-    setRole((data?.role as Role) || null);
+    const request=++profileRequest.current;
+    const {data,error} = await supabase.from('profiles').select('role,active').eq('id', id).maybeSingle();
+    if(request!==profileRequest.current)return;
+    const allowed=!error&&data?.active&&['admin','coordinator','trainer','viewer'].includes(data.role);
+    setRole(allowed?data.role as Role:null);setProfileUserId(allowed?id:null);
   }
 
   async function loadUnread() {
@@ -102,18 +96,23 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   const triggerClass = (active: boolean) =>
     `${styles.trigger}${active ? ` ${styles.triggerActive}` : ''}`;
 
+  const canAccessBusinessRules=!!session?.user&&profileUserId===session.user.id&&['admin','coordinator','trainer','viewer'].includes(role||'');
+
   if (!session) return <>{children}</>;
 
   return (
     <>
-      <header className="topbar">
+      <header className={`topbar ${styles.header}`}>
         <div>
           <div className="eyebrow">BACKTRACE</div>
-          <div className="app-title">
-            Training Administration{' '}
+          <div className={`app-title ${styles.titleRow}`}>
+            <span>Training Administration</span>
+            <div className={styles.titleActions}>
             <a className="version-badge" href="/version-history" aria-label="Open Version History">
               {`v${version}`}
             </a>
+            {canAccessBusinessRules&&<a className={styles.businessRules} href="/business-rules" aria-current={pathname.startsWith('/business-rules')?'page':undefined}>Business Rules</a>}
+            </div>
           </div>
         </div>
         <div className="user-area">
@@ -262,3 +261,4 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
     </>
   );
 }
+

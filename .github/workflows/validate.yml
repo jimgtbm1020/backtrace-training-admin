@@ -45,3 +45,6 @@ jobs:
 
       - name: Check agency import CSV
         run: node database/tests/agency_import_csv.cjs
+
+      - name: Check Business Rules navigation
+        run: node database/tests/business_rules_navigation.cjs

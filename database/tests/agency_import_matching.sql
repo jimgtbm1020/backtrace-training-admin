@@ -1,0 +1,47 @@
+begin;
+do $test$
+declare a uuid;t uuid;g uuid;r uuid;x jsonb;p jsonb;before_count integer; snapshot jsonb;
+begin
+ select id into a from public.profiles where active and role='admin' limit 1;
+ select id into t from public.profiles where active and role='trainer' limit 1;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);
+ perform set_config('request.jwt.claim.sub',a::text,true);
+ execute 'set local role authenticated';
+ x:=public.import_agencies('[{"agency_name":"Import Rollback Police","agency_address":"1 Saved Street","agency_city":"QA City","agency_state":"NJ","agency_zip":"00123"},{"agency_name":" IMPORT  ROLLBACK POLICE ","agency_address":"Overwrite"}]');
+ if x<>jsonb_build_object('imported',1,'skipped',1) then raise exception 'Within-file duplicate protection failed: %',x;end if;
+ x:=public.import_agencies('[{"agency_name":"import rollback police"}]');
+ if (x->>'imported')::int<>0 then raise exception 'Repeated import created duplicate';end if;
+ select id,to_jsonb(agencies.*) into g,snapshot from public.agencies where agency_name='Import Rollback Police';
+ if snapshot->>'agency_zip'<>'00123' then raise exception 'Leading ZIP zero lost';end if;
+ begin
+  perform public.import_agencies('[{"agency_name":"Rollback Atomic First"},{"agency_name":""}]');
+  raise exception 'Invalid import accepted';
+ exception when raise_exception then if sqlerrm not like 'Invalid agency row.%' then raise;end if;end;
+ if exists(select 1 from public.agencies where agency_name='Rollback Atomic First') then raise exception 'Import partially committed';end if;
+ execute 'reset role';select count(*) into before_count from public.agencies;
+ perform set_config('request.jwt.claims','{"role":"anon"}',true);perform set_config('request.jwt.claim.sub','',true);
+ execute 'set local role anon';
+ p:=jsonb_build_object('agency_name',' import   rollback police ','agency_address','99 Submitted Street','city_state_zip','Other City, NY, 10001','contact_person','QA Contact','contact_phone','555-0100','contact_email','match-qa@example.invalid','trainer_contact_name','QA Trainer','trainer_contact_email','trainer-qa@example.invalid','trainer_contact_phone','555-0101','basic_training',true,'training_format','In Person');
+ x:=public.submit_public_training_request('',p,'{}');
+ if (x->>'agency_id')::uuid is distinct from g or (x->>'total_minutes')::int<>240 then raise exception 'Public existing-name match failed';end if;
+ p:=p||'{"agency_name":"Import Rollback PD","contact_email":"unknown-qa1@example.invalid"}';
+ x:=public.submit_public_training_request('',p,'{}');r:=(x->>'id')::uuid;
+ if x->>'agency_id' is not null then raise exception 'Abbreviation guessed a match';end if;
+ x:=public.submit_public_training_request('',p||'{"contact_email":"unknown-qa2@example.invalid"}','{}');
+ if x->>'agency_id' is not null then raise exception 'Unknown name created agency';end if;
+ begin perform public.import_agencies('[{"agency_name":"Anonymous Import"}]');raise exception 'Anonymous import permitted';exception when insufficient_privilege then null;end;
+ execute 'reset role';
+ if (select count(*) from public.agencies)<>before_count then raise exception 'Public submissions created duplicate agencies';end if;
+ if (select to_jsonb(agencies.*) from public.agencies where id=g) is distinct from snapshot then raise exception 'Public submission overwrote registry';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);perform set_config('request.jwt.claim.sub',a::text,true);
+ execute 'set local role authenticated';
+ select to_jsonb(training_requests.*)||jsonb_build_object('agency_id',g) into p from public.training_requests where id=r;
+ perform public.admin_save_training_request(r,p,'{}');
+ if not exists(select 1 from public.training_requests where id=r and agency_id=g and agency_name='Import Rollback PD' and agency_address='99 Submitted Street') then raise exception 'Admin match lost submitted data';end if;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',t,'role','authenticated')::text,true);perform set_config('request.jwt.claim.sub',t::text,true);
+ execute 'set local role authenticated';
+ begin perform public.import_agencies('[{"agency_name":"Trainer Import"}]');raise exception 'Trainer import permitted';exception when raise_exception then if sqlerrm not like 'Administrator or Coordinator access%' then raise;end if;end;
+ execute 'reset role';
+end $test$;
+rollback;

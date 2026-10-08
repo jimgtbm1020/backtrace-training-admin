@@ -1,7 +1,7 @@
 // Run from the repository root: node database/tests/agency_business_rules_pdf.cjs
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),ts=require('typescript');
 const cache={};function load(file){if(cache[file])return cache[file].exports;const module={exports:{}};cache[file]=module;const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;new Function('require','module','exports',code)(name=>name.startsWith('.')?load(path.resolve(path.dirname(file),name)+'.ts'):require(name),module,module.exports);return module.exports;}
-const {buildAgencyRulesPdf}=load(path.resolve('app/library/business-rules/export-pdf.ts'));
+const {buildAgencyRulesPdf}=load(path.resolve('app/business-rules/export-pdf.ts'));
 const agency={id:'one',agency_name:'County Agency',agency_address:'100 Main Street',city_state_zip:'County City, NJ 00000'};
 const items=[{id:'tool',name:'Arrest Tool',item_type:'Tool',description:'Find arrest records.',expected_outcome:'Connect related cases.'},{id:'dashboard',name:'Agency Dashboard',item_type:'Dashboard',description:'Review activity.',expected_outcome:'Monitor changes.'}];
 const assignments=[{agency_id:'one',item_id:'tool',data_source:'County Records Feed',retention_value:90,retention_unit:'Days'},{agency_id:'one',item_id:'dashboard',data_source:'County Activity Feed',retention_value:5,retention_unit:'Years'},{agency_id:'two',item_id:'tool',data_source:'OTHER AGENCY PRIVATE FEED',retention_value:999,retention_unit:'Months'}];

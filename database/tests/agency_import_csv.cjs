@@ -1,5 +1,5 @@
 const fs=require('fs'),ts=require('typescript'),assert=require('node:assert/strict');
-const source=fs.readFileSync('app/library/business-rules/import-csv.ts','utf8');
+const source=fs.readFileSync('app/business-rules/import-csv.ts','utf8');
 const mod={exports:{}};new Function('exports','require','module',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(mod.exports,require,mod);
 const {parseAgencyCsv,previewAgencies}=mod.exports;
 const rows=parseAgencyCsv('\uFEFFAgency Name,Street Address,City,State,ZIP\r\n"City Police","1 Main, Suite 2",Town,NJ,00123\r\n"city   police",2 Main,Town,NJ,00123\r\n"Sheriff ""Office""",3 Main,Town,NJ,00124');

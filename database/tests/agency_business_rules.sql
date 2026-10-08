@@ -8,9 +8,9 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);
  perform set_config('request.jwt.claim.sub',a::text,true);
  execute 'set local role authenticated';
- insert into public.agencies(agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,created_by,updated_by)
+ insert into public.business_rules_agencies(agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,created_by,updated_by)
  values('Registry Rollback Agency','100 QA Street','QA City, NJ, 00000','QA City','NJ','00000',a,a) returning id into g;
- insert into public.agencies(agency_name,created_by,updated_by) values('Registry Rollback Other Agency',a,a) returning id into g2;
+ insert into public.business_rules_agencies(agency_name,created_by,updated_by) values('Registry Rollback Other Agency',a,a) returning id into g2;
  insert into public.resource_items(name,item_type,description,expected_outcome) values('Registry Rollback Tool','Tool','Find linked records.','Identify relevant connections.') returning id into i;
  insert into public.agency_item_assignments(agency_id,item_id,data_source,retention_value,retention_unit) values(g,i,'Agency One Feed',90,'Days') returning id,updated_at into s,stamp;
  insert into public.agency_item_assignments(agency_id,item_id,data_source,retention_value,retention_unit) values(g2,i,'Agency Two Feed',7,'Years');
@@ -23,15 +23,15 @@ begin
  update public.agency_item_assignments set retention_value=999 where id=s and updated_at=stamp;
  get diagnostics n=row_count;if n<>0 then raise exception 'Stale assignment update allowed';end if;
  if (select data_source from public.agency_item_assignments where agency_id=g2 and item_id=i)<>'Agency Two Feed' then raise exception 'Agency-specific source overwritten';end if;
- -- An agency registered before it trains must remain the SAME record later.
+ -- An agency registered before it trains must not be linked automatically to training.
  insert into public.training_requests(agency_name,basic_training,trainer_contact_name,trainer_contact_email,trainer_contact_phone,created_by,updated_by,total_minutes)
  values('  REGISTRY ROLLBACK AGENCY  ',true,'QA Trainer','qa@example.invalid','555-0100',a,a,240) returning id into r;
- if (select agency_id from public.training_requests where id=r) is distinct from g then raise exception 'Future training created another agency';end if;
- if (select count(*) from public.agencies where lower(btrim(agency_name))='registry rollback agency')<>1 then raise exception 'Duplicate agency created';end if;
+ if (select agency_id from public.training_requests where id=r) is not null then raise exception 'Business Rules agency leaked into training matching';end if;
+ if (select count(*) from public.business_rules_agencies where lower(btrim(agency_name))='registry rollback agency')<>1 then raise exception 'Duplicate agency created';end if;
  if (select retention_value from public.agency_item_assignments where id=s)<>120 then raise exception 'Training changed retention';end if;
- if (select agency_address from public.agencies where id=g)<>'100 QA Street' then raise exception 'Training overwrote agency';end if;
- update public.agencies set city_state_zip='New City, PA, 11111' where id=g;
- if exists(select 1 from public.agencies where id=g and (agency_city is not null or agency_state is not null or agency_zip is not null)) then raise exception 'Legacy address edit left stale structured address';end if;
+ if (select agency_address from public.business_rules_agencies where id=g)<>'100 QA Street' then raise exception 'Training overwrote agency';end if;
+ update public.business_rules_agencies set city_state_zip='New City, PA, 11111' where id=g;
+ if exists(select 1 from public.business_rules_agencies where id=g and (agency_city is not null or agency_state is not null or agency_zip is not null)) then raise exception 'Legacy address edit left stale structured address';end if;
  -- Trainers and viewers may read, but cannot change registry rules.
  execute 'reset role';
  perform set_config('request.jwt.claims',jsonb_build_object('sub',t,'role','authenticated')::text,true);perform set_config('request.jwt.claim.sub',t::text,true);
@@ -56,7 +56,7 @@ begin
  if (p->>'count')::integer<>3 or p->'blockers'<>'[]'::jsonb then raise exception 'Cleanup dependencies incorrect: %',p;end if;
  result:=public.delete_test_cleanup((p->>'id')::uuid,'DELETE 3 TEST RECORDS');
  if exists(select 1 from public.resource_items where id=i) or exists(select 1 from public.agency_item_assignments where item_id=i) then raise exception 'Reviewed cleanup failed';end if;
- if not exists(select 1 from public.agencies where id=g) then raise exception 'Item cleanup deleted shared agency';end if;
+ if not exists(select 1 from public.business_rules_agencies where id=g) then raise exception 'Item cleanup deleted shared agency';end if;
  execute 'reset role';
 end $test$;
 rollback;

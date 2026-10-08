@@ -1,0 +1,38 @@
+begin;
+do $test$
+declare a uuid;t uuid;g uuid;g2 uuid;i uuid;j uuid;stamp timestamptz;n integer;payload jsonb;
+begin
+ select id into a from public.profiles where active and role='admin' limit 1;
+ select id into t from public.profiles where active and role='trainer' limit 1;
+ if a is null or t is null then raise exception 'QA requires active admin and trainer';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);perform set_config('request.jwt.claim.sub',a::text,true);execute 'set local role authenticated';
+ insert into public.business_rules_agencies(agency_name) values('Bulk rollback agency') returning id into g;
+ insert into public.business_rules_agencies(agency_name) values('Bulk rollback second agency') returning id into g2;
+ insert into public.resource_items(name,item_type,description) values('Bulk rollback tool A','Tool','QA') returning id into i;
+ insert into public.resource_items(name,item_type,description) values('Bulk rollback tool B','Dashboard','QA') returning id into j;
+ payload:=jsonb_build_array(jsonb_build_object('item_id',i,'data_source','Feed A','retention_value',90,'retention_unit','Days'),jsonb_build_object('item_id',j,'data_source','Feed B','retention_value',2,'retention_unit','Years'));
+ n:=public.save_business_rule_assignments(g,payload);if n<>2 then raise exception 'Batch count wrong';end if;
+ select updated_at into stamp from public.agency_item_assignments where agency_id=g and item_id=i;
+ n:=public.save_business_rule_assignments(g,jsonb_build_array(jsonb_build_object('item_id',i,'data_source','Updated A','retention_value',6,'retention_unit','Months','expected_updated_at',stamp)));
+ if n<>1 or not exists(select 1 from public.agency_item_assignments where agency_id=g and item_id=j and data_source='Feed B') then raise exception 'Edit changed unrelated assignment';end if;
+ begin perform public.save_business_rule_assignments(g,jsonb_build_array(jsonb_build_object('item_id',i,'data_source','Stale','retention_value',1,'retention_unit','Days','expected_updated_at',stamp)));raise exception 'Stale accepted';exception when raise_exception then if sqlerrm not like 'An assignment changed.%' then raise;end if;end;
+ begin perform public.save_business_rule_assignments(g,payload);raise exception 'Duplicate accepted';exception when raise_exception then if sqlerrm not like 'An assignment changed.%' then raise;end if;end;
+ begin perform public.save_business_rule_assignments(g2,payload||jsonb_build_array(jsonb_build_object('item_id','ffffffff-ffff-ffff-ffff-ffffffffffff','data_source','','retention_value',0,'retention_unit','Days')));raise exception 'Invalid accepted';exception when raise_exception then if sqlerrm not like 'Each tool needs%' then raise;end if;end;
+ if exists(select 1 from public.agency_item_assignments where agency_id=g2) then raise exception 'Partial batch saved';end if;
+ begin perform public.save_business_rule_assignments(g2,payload||jsonb_build_array(payload->0));raise exception 'Repeated tool accepted';exception when raise_exception then if sqlerrm<>'Select each tool once.' then raise;end if;end;
+ update public.business_rules_agencies set active=false where id=g2;
+ begin perform public.save_business_rule_assignments(g2,payload);raise exception 'Inactive accepted';exception when raise_exception then if sqlerrm<>'Choose an active business rules agency.' then raise;end if;end;
+ execute 'reset role';perform set_config('request.jwt.claims',jsonb_build_object('sub',t,'role','authenticated')::text,true);perform set_config('request.jwt.claim.sub',t::text,true);execute 'set local role authenticated';
+ begin perform public.save_business_rule_assignments(g,payload);raise exception 'Trainer accepted';exception when raise_exception then if sqlerrm<>'Administrator or Coordinator access is required.' then raise;end if;end;
+ execute 'reset role';update public.profiles set role='viewer' where id=t;execute 'set local role authenticated';
+ begin perform public.save_business_rule_assignments(g,payload);raise exception 'Viewer accepted';exception when raise_exception then if sqlerrm<>'Administrator or Coordinator access is required.' then raise;end if;end;
+ execute 'reset role';update public.profiles set role='coordinator' where id=t;execute 'set local role authenticated';
+ insert into public.business_rules_agencies(agency_name) values('Bulk rollback coordinator') returning id into g2;
+ if public.save_business_rule_assignments(g2,payload)<>2 then raise exception 'Coordinator denied';end if;
+ execute 'reset role';update public.profiles set active=false where id=t;execute 'set local role authenticated';
+ begin perform public.save_business_rule_assignments(g,payload);raise exception 'Inactive accepted';exception when raise_exception then if sqlerrm<>'Administrator or Coordinator access is required.' then raise;end if;end;
+ execute 'reset role';execute 'set local role anon';
+ begin perform public.save_business_rule_assignments(g,payload);raise exception 'Anon accepted';exception when insufficient_privilege then null;end;
+ execute 'reset role';
+end $test$;
+rollback;

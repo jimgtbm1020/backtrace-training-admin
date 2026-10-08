@@ -112,7 +112,7 @@ export default function AgencyBusinessRulesPage(){
  if(access!=='allowed')return <main className="shell"><section className="card"><h1>Agency Business Rules</h1><p>{access==='checking'?'Checking Backtrace access…':error||'Sign in through Training Administration.'}</p>{access==='denied'&&<a href="/">Return to sign in</a>}</section></main>;
  const disabled=busy||loading;
  return <main className={'shell '+styles.page}>
-  <header className={styles.header}><div><span className="library-eyebrow">BUSINESS RULES</span><h1>Agency Business Rules</h1></div><a href="/">Back to dashboard</a></header>
+  <header className={styles.header}><div><span className="library-eyebrow">BUSINESS RULES</span><h1>Agency Business Rules</h1></div><a className="dashboard-return-button" href="/">Back to dashboard</a></header>
   <nav className={styles.tabs} role="tablist" aria-label="Agency business rules">{tabs.map(([id,label])=><button type="button" key={id} role="tab" id={'rules-tab-'+id} aria-controls={'rules-panel-'+id} aria-selected={tab===id} onClick={()=>{setTab(id);setMessage('');}}>{label}</button>)}</nav>
   {!canManage&&<p className={styles.description}>Read-only access. Administrators and Coordinators maintain these records.</p>}
   {error&&<div className={styles.error} role="alert">{error} <button type="button" disabled={disabled} onClick={()=>void load()}>Refresh records</button></div>}

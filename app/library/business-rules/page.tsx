@@ -9,7 +9,7 @@ import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency Item Assignment'],['report','Agency Business Rules Report']] as const;
 type Tab=typeof tabs[number][0];
-const descriptions:Record<Tab,string>={agencies:'Create or update an agency’s name and address. Save each agency once so it can be assigned to multiple tools.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency and assign a tool, then record that agency’s data source and retention period. Existing assignments appear below.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
+const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency and assign a tool, then record that agency’s data source and retention period. Existing assignments appear below.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
 const blankAgency={agency_name:'',agency_address:'',agency_city:'',agency_state:'',agency_zip:'',city_state_zip:''};
 const blankItem={name:'',item_type:'Tool',description:'',expected_outcome:''};
 
@@ -39,7 +39,7 @@ export default function AgencyBusinessRulesPage(){
   setLoading(true);setError('');
   try{
    const [a,i,s]=await Promise.all([
-    allRows<Agency>((from,to)=>supabase.from('agencies').select('id,agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,active,updated_at').order('agency_name').order('id').range(from,to)),
+    allRows<Agency>((from,to)=>supabase.from('business_rules_agencies').select('id,agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,active,updated_at').order('agency_name').order('id').range(from,to)),
     allRows<Item>((from,to)=>supabase.from('resource_items').select('id,name,item_type,description,expected_outcome,updated_at').order('name').order('id').range(from,to)),
     allRows<Assignment>((from,to)=>supabase.from('agency_item_assignments').select('id,agency_id,item_id,data_source,retention_value,retention_unit,updated_at').order('id').range(from,to))
    ]);
@@ -77,7 +77,7 @@ export default function AgencyBusinessRulesPage(){
  }
  async function importAgencies(){
   if(!canManage||busy||loading||!importRows.length)return;setBusy(true);setError('');setMessage('');
-  try{const {data,error:importError}=await supabase.rpc('import_agencies',{p_rows:importRows});if(importError)throw new Error(importError.message);setImportRows([]);setImportFile('');if(await load())setMessage(`${data.imported} agencies imported; ${data.skipped} duplicates skipped.`);}catch(e){setError(e instanceof Error?e.message:'Unable to import agencies. No rows were saved.');}finally{setBusy(false);}
+  try{const {data,error:importError}=await supabase.rpc('import_business_rules_agencies',{p_rows:importRows});if(importError)throw new Error(importError.message);setImportRows([]);setImportFile('');if(await load())setMessage(`${data.imported} agencies imported; ${data.skipped} duplicates skipped.`);}catch(e){setError(e instanceof Error?e.message:'Unable to import agencies. No rows were saved.');}finally{setBusy(false);}
  }
  async function saveAgency(event:FormEvent){
   event.preventDefault();if(!canManage||busy||loading)return;setBusy(true);setError('');setMessage('');
@@ -86,7 +86,7 @@ export default function AgencyBusinessRulesPage(){
    if(agencies.some(a=>a.id!==editingAgency?.id&&a.agency_name.trim().replace(/\s+/g,' ').toLowerCase()===name.toLowerCase()))throw new Error('This agency already exists. Edit it in the list below.');
    const location=[agencyForm.agency_city,agencyForm.agency_state,agencyForm.agency_zip].map(x=>x.trim()).filter(Boolean).join(', ')||agencyForm.city_state_zip.trim();
    const payload={agency_name:name,agency_address:agencyForm.agency_address.trim(),agency_city:agencyForm.agency_city.trim()||null,agency_state:agencyForm.agency_state.trim()||null,agency_zip:agencyForm.agency_zip.trim()||null,city_state_zip:location,updated_by:userId};
-   const result=editingAgency?await supabase.from('agencies').update(payload).eq('id',editingAgency.id).eq('updated_at',editingAgency.updated_at).select('id').maybeSingle():await supabase.from('agencies').insert({...payload,created_by:userId}).select('id').single();
+   const result=editingAgency?await supabase.from('business_rules_agencies').update(payload).eq('id',editingAgency.id).eq('updated_at',editingAgency.updated_at).select('id').maybeSingle():await supabase.from('business_rules_agencies').insert({...payload,created_by:userId}).select('id').single();
    if(result.error)throw new Error(result.error.code==='23505'?'This agency already exists. Edit it in the list below.':result.error.message);
    if(!result.data)throw new Error('This agency changed or is unavailable. Refresh and review it before saving.');
    setEditingAgency(null);setAgencyForm(blankAgency);if(await load()){setAgencyId(result.data.id);setReportAgencyId(result.data.id);setMessage('Agency saved.');}

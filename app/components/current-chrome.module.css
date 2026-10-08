@@ -117,10 +117,10 @@
 
   .dropdown {
     position: fixed;
-    top: 158px;
+    top: var(--dropdown-top, 158px);
     left: 12px;
     width: min(280px, calc(100vw - 24px));
-    max-height: calc(100vh - 176px);
+    max-height: calc(100vh - var(--dropdown-top, 158px) - 18px);
     overflow-y: auto;
   }
 

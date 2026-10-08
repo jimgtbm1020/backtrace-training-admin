@@ -21,6 +21,8 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   const [unread, setUnread] = useState(0);
   const [profileUserId,setProfileUserId]=useState<string|null>(null);
   const profileRequest=useRef(0);
+  const navigationRef=useRef<HTMLElement|null>(null);
+  const [dropdownTop,setDropdownTop]=useState(158);
 
   useEffect(() => {
     setMenu(null);
@@ -59,6 +61,14 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
       document.removeEventListener('visibilitychange', visible);
     };
   }, [session?.user?.id]);
+
+  function positionDropdown(){if(navigationRef.current)setDropdownTop(Math.max(12,navigationRef.current.getBoundingClientRect().bottom+8));}
+  function toggleMenu(name:string){positionDropdown();setMenu(menu===name?null:name);}
+  useEffect(()=>{
+    if(!menu)return;
+    window.addEventListener('resize',positionDropdown);window.addEventListener('scroll',positionDropdown,{passive:true});
+    return()=>{window.removeEventListener('resize',positionDropdown);window.removeEventListener('scroll',positionDropdown);};
+  },[menu]);
 
   async function loadCurrentVersion() {
     const {data} = await supabase
@@ -126,7 +136,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
         </div>
       </header>
 
-      <nav className="main-nav" aria-label="Main navigation">
+      <nav ref={navigationRef} className="main-nav" aria-label="Main navigation" style={{'--dropdown-top':`${dropdownTop}px`} as React.CSSProperties}>
         <a className={pathname === '/' ? 'active' : ''} href="/">
           Dashboard
         </a>
@@ -140,7 +150,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
             )}
             type="button"
             aria-expanded={menu === 'training'}
-            onClick={() => setMenu(menu === 'training' ? null : 'training')}
+            onClick={() => toggleMenu('training')}
           >
             Training⌄
           </button>
@@ -176,7 +186,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
             )}
             type="button"
             aria-expanded={menu === 'people'}
-            onClick={() => setMenu(menu === 'people' ? null : 'people')}
+            onClick={() => toggleMenu('people')}
           >
             People⌄
           </button>
@@ -214,7 +224,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
               )}
               type="button"
               aria-expanded={menu === 'admin'}
-              onClick={() => setMenu(menu === 'admin' ? null : 'admin')}
+              onClick={() => toggleMenu('admin')}
             >
               Administration⌄
             </button>
@@ -239,7 +249,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
             className={triggerClass(pathname.startsWith('/help') || pathname.startsWith('/version-history'))}
             type="button"
             aria-expanded={menu === 'help'}
-            onClick={() => setMenu(menu === 'help' ? null : 'help')}
+            onClick={() => toggleMenu('help')}
           >
             Help⌄
           </button>

@@ -56,7 +56,7 @@ export default function EmailSettings(){
   return <main className="shell legacy-admin-page">
     <header className="legacy-page-header">
       <div><h1 className="help-heading">Email Settings<HelpTip text="This read-only page shows the live delivery, queue, webhook, tracking, and template state. Verify recipients and the pending queue before sending."/></h1><p>Review communications configuration and delivery safeguards.</p></div>
-      <a href="/">Back to dashboard</a>
+      <a className="dashboard-return-button" href="/">Back to dashboard</a>
     </header>
 
     {error?<section className="card"><p className="error" role="alert">{error}</p></section>:<>
@@ -93,3 +93,4 @@ export default function EmailSettings(){
     </>}
   </main>;
 }
+

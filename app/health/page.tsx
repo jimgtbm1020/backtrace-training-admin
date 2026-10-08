@@ -66,7 +66,7 @@ export default function HealthPage(){
   const passed=Object.values(results).filter(value=>value==='Passed').length;
 
   if(loadingStatus)return <main className="shell"><section className="card"><h1>System Status</h1><p>Checking Administrator access and protected system state…</p></section></main>;
-  if(error&&!status)return <main className="shell"><section className="card"><h1>System Status</h1><p className="error">{error}</p><a href="/">Return to dashboard</a></section></main>;
+  if(error&&!status)return <main className="shell"><section className="card"><h1>System Status</h1><p className="error">{error}</p><a className="dashboard-return-button" href="/">Return to dashboard</a></section></main>;
 
   return <main className="shell system-status-page">
     <header className="legacy-page-header">
@@ -124,3 +124,4 @@ export default function HealthPage(){
     </section>
   </main>;
 }
+

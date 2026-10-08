@@ -81,3 +81,7 @@
 .requests-header-actions a.primary-button:focus-visible{color:#fff;text-decoration:none}
 
 .library-sections{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #dce4ed}.library-sections a{display:inline-block;padding:9px 13px;border-radius:7px;color:#254d7e;background:#f2f6fb;font-size:14px;text-decoration:none}.library-sections a[aria-current=page]{background:#254d7e;color:#fff}
+
+/* Shared dashboard return action across staff pages and error states. */
+a.dashboard-return-button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:40px;max-width:100%;flex-shrink:0;padding:10px 16px;border:1px solid #ba8623;border-radius:8px;background:#e8b84a;color:#20334e;font-size:14px;font-weight:700;line-height:1.35;text-decoration:none;box-shadow:0 2px 6px #20334e14;vertical-align:middle}
+a.dashboard-return-button:visited{color:#20334e}a.dashboard-return-button:hover{background:#d9a536;color:#20334e;border-color:#a67418;text-decoration:none}a.dashboard-return-button:active{background:#cc962b}a.dashboard-return-button:focus-visible{outline:3px solid #254d7e;outline-offset:3px}@media(pointer:coarse){a.dashboard-return-button{min-height:44px}}

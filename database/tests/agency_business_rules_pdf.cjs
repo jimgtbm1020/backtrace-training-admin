@@ -1,0 +1,13 @@
+// Run from the repository root: node database/tests/agency_business_rules_pdf.cjs
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),ts=require('typescript');
+const cache={};function load(file){if(cache[file])return cache[file].exports;const module={exports:{}};cache[file]=module;const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;new Function('require','module','exports',code)(name=>name.startsWith('.')?load(path.resolve(path.dirname(file),name)+'.ts'):require(name),module,module.exports);return module.exports;}
+const {buildAgencyRulesPdf}=load(path.resolve('app/library/business-rules/export-pdf.ts'));
+const agency={id:'one',agency_name:'County Agency',agency_address:'100 Main Street',city_state_zip:'County City, NJ 00000'};
+const items=[{id:'tool',name:'Arrest Tool',item_type:'Tool',description:'Find arrest records.',expected_outcome:'Connect related cases.'},{id:'dashboard',name:'Agency Dashboard',item_type:'Dashboard',description:'Review activity.',expected_outcome:'Monitor changes.'}];
+const assignments=[{agency_id:'one',item_id:'tool',data_source:'County Records Feed',retention_value:90,retention_unit:'Days'},{agency_id:'one',item_id:'dashboard',data_source:'County Activity Feed',retention_value:5,retention_unit:'Years'},{agency_id:'two',item_id:'tool',data_source:'OTHER AGENCY PRIVATE FEED',retention_value:999,retention_unit:'Months'}];
+const compact=buildAgencyRulesPdf(agency,items,assignments);assert.equal(compact.getNumberOfPages(),1);const raw=compact.output();assert(raw.includes('Agency Business Rules'));assert(raw.includes('County Records Feed'));assert(!raw.includes('OTHER AGENCY PRIVATE FEED'));assert(raw.includes('Page 1 of 1'));
+const longItems=[{...items[0],description:'Long description preserved. '.repeat(140),expected_outcome:'Outcome preserved. '.repeat(100)}];
+const long=buildAgencyRulesPdf(agency,longItems,assignments.filter(a=>a.item_id==='tool'));assert(long.getNumberOfPages()>1);assert(long.output().includes('continued'));
+const none=buildAgencyRulesPdf(agency,items,[]);assert.equal(none.getNumberOfPages(),1);assert(none.output().includes('No items assigned to this agency.'));
+if(process.env.REGISTRY_QA_PDF_DIR){fs.mkdirSync(process.env.REGISTRY_QA_PDF_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'compact.pdf'),Buffer.from(compact.output('arraybuffer')));fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'long.pdf'),Buffer.from(long.output('arraybuffer')));}
+console.log('PDF checks passed: compact two-item report, agency isolation, empty report, and long-content continuation.');

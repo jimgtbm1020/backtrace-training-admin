@@ -1,9 +1,10 @@
 'use client';
 
-import {FormEvent,useEffect,useState} from 'react';
+import {FormEvent,useEffect,useRef,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 import {Agency,Item,Assignment,agencyAddress,agencyLocation} from './types';
 import styles from './rules.module.css';
+import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency Item Assignment'],['report','Agency Business Rules Report']] as const;
@@ -26,6 +27,8 @@ export default function AgencyBusinessRulesPage(){
  const [itemForm,setItemForm]=useState(blankItem),[editingItem,setEditingItem]=useState<Item|null>(null);
  const [agencyId,setAgencyId]=useState(''),[itemId,setItemId]=useState(''),[reportAgencyId,setReportAgencyId]=useState('');
  const [source,setSource]=useState(''),[retention,setRetention]=useState('90'),[unit,setUnit]=useState('Days');
+ const importInput=useRef<HTMLInputElement>(null);const [importRows,setImportRows]=useState<ImportRow[]>([]);const [importFile,setImportFile]=useState('');
+ const importPreview=previewAgencies(importRows,agencies);
  const canManage=role==='admin'||role==='coordinator';
  const agency=agencies.find(a=>a.id===agencyId),reportAgency=agencies.find(a=>a.id===reportAgencyId);
  const selectedAssignment=assignments.find(a=>a.agency_id===agencyId&&a.item_id===itemId);
@@ -55,6 +58,7 @@ export default function AgencyBusinessRulesPage(){
     setRole(profile.role);setUserId(data.user.id);setAccess('allowed');await load();
    }catch(e){if(mounted){setError(e instanceof Error?e.message:'Unable to check access.');setAccess('denied');setLoading(false);}}
   }
+  const requestedTab=new URLSearchParams(window.location.search).get('tab');if(tabs.some(([id])=>id===requestedTab))setTab(requestedTab as Tab);
   void initialize();
   const {data:listener}=supabase.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){setAccess('denied');setRole('');setAgencies([]);setItems([]);setAssignments([]);}});
   return()=>{mounted=false;listener.subscription.unsubscribe();};
@@ -63,10 +67,23 @@ export default function AgencyBusinessRulesPage(){
 
  function editAgency(row:Agency){setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,agency_address:row.agency_address||'',agency_city:row.agency_city||'',agency_state:row.agency_state||'',agency_zip:row.agency_zip||'',city_state_zip:row.city_state_zip||''});setTab('agencies');setMessage('');}
  function editItem(row:Item){setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
+ function downloadTemplate(){
+  const url=URL.createObjectURL(new Blob(['Agency Name,Street Address,City,State,ZIP\r\n'],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='agency-import-template.csv';a.click();URL.revokeObjectURL(url);
+ }
+ async function previewImport(file:File){
+  setError('');setMessage('');setImportRows([]);setImportFile('');
+  try{if(file.size>1024*1024)throw new Error('Choose a CSV smaller than 1 MB.');const rows=parseAgencyCsv(await file.text());setImportRows(rows);setImportFile(file.name);}catch(e){setError(e instanceof Error?e.message:'Unable to read CSV.');}
+ }
+ async function importAgencies(){
+  if(!canManage||busy||loading||!importRows.length)return;setBusy(true);setError('');setMessage('');
+  try{const {data,error:importError}=await supabase.rpc('import_agencies',{p_rows:importRows});if(importError)throw new Error(importError.message);setImportRows([]);setImportFile('');if(await load())setMessage(`${data.imported} agencies imported; ${data.skipped} duplicates skipped.`);}catch(e){setError(e instanceof Error?e.message:'Unable to import agencies. No rows were saved.');}finally{setBusy(false);}
+ }
  async function saveAgency(event:FormEvent){
   event.preventDefault();if(!canManage||busy||loading)return;setBusy(true);setError('');setMessage('');
   try{
    const name=agencyForm.agency_name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Agency name is required.');
+   if(agencies.some(a=>a.id!==editingAgency?.id&&a.agency_name.trim().replace(/\s+/g,' ').toLowerCase()===name.toLowerCase()))throw new Error('This agency already exists. Edit it in the list below.');
    const location=[agencyForm.agency_city,agencyForm.agency_state,agencyForm.agency_zip].map(x=>x.trim()).filter(Boolean).join(', ')||agencyForm.city_state_zip.trim();
    const payload={agency_name:name,agency_address:agencyForm.agency_address.trim(),agency_city:agencyForm.agency_city.trim()||null,agency_state:agencyForm.agency_state.trim()||null,agency_zip:agencyForm.agency_zip.trim()||null,city_state_zip:location,updated_by:userId};
    const result=editingAgency?await supabase.from('agencies').update(payload).eq('id',editingAgency.id).eq('updated_at',editingAgency.updated_at).select('id').maybeSingle():await supabase.from('agencies').insert({...payload,created_by:userId}).select('id').single();
@@ -112,7 +129,7 @@ export default function AgencyBusinessRulesPage(){
   {message&&<p role="status" aria-live="polite">{message}</p>}{loading&&<p role="status">Loading saved records…</p>}
   <section id="rules-panel-agencies" role="tabpanel" aria-labelledby="rules-tab-agencies" hidden={tab!=='agencies'}>
    <p className={styles.description}>{descriptions.agencies}</p>
-   {canManage&&<form className={styles.panel} onSubmit={saveAgency}><h2>{editingAgency?'Edit agency':'Create agency'}</h2><fieldset className={styles.fields} disabled={disabled}>
+   {canManage&&<form className={styles.panel} onSubmit={saveAgency}><div className={styles.importHeading}><h2>{editingAgency?'Edit agency':'Create agency'}</h2><button type="button" disabled={disabled} onClick={()=>importInput.current?.click()}>Import Data</button></div><input ref={importInput} type="file" accept=".csv,text/csv" hidden aria-label="Agency import CSV" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void previewImport(file);}}/><p className={styles.description}>Import agencies from CSV. <button type="button" disabled={disabled} onClick={downloadTemplate}>Download template</button> · Name and address only. Existing agencies are skipped.</p><fieldset className={styles.fields} disabled={disabled}>
     <label className={styles.full}>Agency name<input required maxLength={160} value={agencyForm.agency_name} onChange={e=>setAgencyForm({...agencyForm,agency_name:e.target.value})}/></label>
     <label className={styles.full}>Street address<input maxLength={250} value={agencyForm.agency_address} onChange={e=>setAgencyForm({...agencyForm,agency_address:e.target.value})}/></label>
     <label>City<input maxLength={120} value={agencyForm.agency_city} onChange={e=>setAgencyForm({...agencyForm,agency_city:e.target.value})}/></label>
@@ -121,6 +138,7 @@ export default function AgencyBusinessRulesPage(){
     {editingAgency&&!editingAgency.agency_city&&!editingAgency.agency_state&&!editingAgency.agency_zip&&agencyForm.city_state_zip&&<p className={styles.description}>Existing location: {agencyForm.city_state_zip}. Enter City, State, and ZIP to update it.</p>}
     <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':'Save agency'}</button><button type="button" onClick={()=>{setEditingAgency(null);setAgencyForm(blankAgency);}}>New agency</button></div>
    </fieldset></form>}
+   {canManage&&importRows.length>0&&<section className={styles.panel} aria-label="Agency import preview"><h2>Review import</h2><p>{importFile} · {importPreview.filter(r=>!r.duplicate).length} new · {importPreview.filter(r=>r.duplicate).length} duplicates to skip</p><p className={styles.description}>Review spelling and abbreviations against existing agencies below. Different names need review before importing. Existing records and business rules will not be changed.</p><div className={styles.importTable}><table><thead><tr><th>Agency</th><th>Address</th><th>Action</th></tr></thead><tbody>{importPreview.map((r,i)=><tr key={i}><td>{r.agency_name}</td><td>{[r.agency_address,r.agency_city,r.agency_state,r.agency_zip].filter(Boolean).join(', ')}</td><td>{r.duplicate?'Skip duplicate':<button disabled={disabled} type="button" onClick={()=>setImportRows(rows=>rows.filter((_,j)=>j!==i))}>Exclude row</button>}</td></tr>)}</tbody></table></div><div className={styles.actions}><button className={styles.primary} disabled={disabled||importPreview.every(r=>r.duplicate)} onClick={()=>void importAgencies()}>{busy?'Importing…':'Import new agencies'}</button><button disabled={disabled} onClick={()=>{setImportRows([]);setImportFile('');}}>Cancel import</button></div></section>}
    <div className={styles.panel}><h2>Existing agencies</h2>{agencies.map(row=><div className={styles.row} key={row.id}><div><h3>{row.agency_name}{!row.active?' (Inactive)':''}</h3><p>{agencyAddress(row)||'No address saved.'}</p></div>{canManage&&<div className={styles.rowActions}><button disabled={disabled} onClick={()=>editAgency(row)}>Edit</button><button disabled={disabled||!row.active} onClick={()=>{setAgencyId(row.id);setTab('assign');}}>Attach item</button></div>}</div>)}{!loading&&!agencies.length&&<p>No agencies saved yet.</p>}</div>
   </section>
   <section id="rules-panel-items" role="tabpanel" aria-labelledby="rules-tab-items" hidden={tab!=='items'}>

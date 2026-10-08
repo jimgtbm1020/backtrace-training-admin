@@ -1,0 +1,14 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('node:assert/strict');
+const source=fs.readFileSync('app/library/business-rules/import-csv.ts','utf8');
+const mod={exports:{}};new Function('exports','require','module',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(mod.exports,require,mod);
+const {parseAgencyCsv,previewAgencies}=mod.exports;
+const rows=parseAgencyCsv('\uFEFFAgency Name,Street Address,City,State,ZIP\r\n"City Police","1 Main, Suite 2",Town,NJ,00123\r\n"city   police",2 Main,Town,NJ,00123\r\n"Sheriff ""Office""",3 Main,Town,NJ,00124');
+assert.equal(rows[0].agency_zip,'00123');assert.equal(rows[0].agency_address,'1 Main, Suite 2');assert.equal(rows[2].agency_name,'Sheriff "Office"');
+assert.deepEqual(previewAgencies(rows,[]).map(x=>x.duplicate),[false,true,false]);
+assert.deepEqual(previewAgencies(rows,[{agency_name:' CITY POLICE '}]).map(x=>x.duplicate),[true,true,false]);
+assert.throws(()=>parseAgencyCsv('Agency Name,Street Address,City,State,ZIP\n,,,,') );
+assert.throws(()=>parseAgencyCsv('Agency Name,Street Address,City,State,ZIP\n"unclosed,,,,') );
+assert.throws(()=>parseAgencyCsv('Agency Name,Street Address,City,State,ZIP\n"Name"extra,,,,') );
+assert.throws(()=>parseAgencyCsv('Name,Street Address,City,State,ZIP\nName,,,,') );
+assert.throws(()=>parseAgencyCsv('Agency Name,Street Address,City,State,ZIP\n'+Array(501).fill('Name,,,,').join('\n')) );
+console.log('Agency CSV tests passed: quoted commas, BOM/CRLF, escaped quotes, ZIP zeros, duplicate preview, malformed files, row limit.');

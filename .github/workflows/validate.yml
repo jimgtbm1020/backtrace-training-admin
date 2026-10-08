@@ -38,3 +38,7 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Check agency business rules PDF
+        run: node database/tests/agency_business_rules_pdf.cjs
+

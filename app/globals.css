@@ -79,3 +79,5 @@
 .requests-header-actions a.primary-button:visited,
 .requests-header-actions a.primary-button:hover,
 .requests-header-actions a.primary-button:focus-visible{color:#fff;text-decoration:none}
+
+.library-sections{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #dce4ed}.library-sections a{display:inline-block;padding:9px 13px;border-radius:7px;color:#254d7e;background:#f2f6fb;font-size:14px;text-decoration:none}.library-sections a[aria-current=page]{background:#254d7e;color:#fff}

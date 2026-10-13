@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
         const methods = claimsData?.claims?.amr as {method:string;timestamp:number}[] | undefined;
         recoverySession = claimsData?.claims?.session_id as string | undefined;
         const now = Math.floor(Date.now()/1000);
-        if (claimsError || !recoverySession || !methods?.some(m => m.method === "recovery" && m.timestamp <= now && now-m.timestamp <= 3600)) return json({ error: "Open a fresh password reset link from your email." }, 403);
+        if (claimsError || !recoverySession || actor.app_metadata?.password_recovery_completed_session === recoverySession || !methods?.some(m => (m.method === "otp" || m.method === "recovery") && Number.isFinite(m.timestamp) && m.timestamp <= now && now-m.timestamp <= 3600)) return json({ error: "Open a fresh password reset link from your email." }, 403);
       } else {
         if (!currentPassword || !actor.email) return json({ error: "Enter your current or temporary password." }, 400);
         if (nextPassword === currentPassword) return json({ error: "Choose a new password different from your temporary or current password." }, 400);

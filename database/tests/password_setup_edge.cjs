@@ -19,6 +19,9 @@ role='trainer';flag=true;validCurrent=false;let n=updates.length;r=await invoke(
 validCurrent=true,emailEnabled=true,emailFailure=false,transientFailure=false,emailCalls=[],audits=[],deletes=0;r=await invoke({action:'change_own_password',current_password:'test-temp',new_password:'test-new-password',target_user_id:'other'});assert.equal(r.status,200);assert.equal(updates.at(-1).id,'self');assert.equal(updates.at(-1).attrs.app_metadata.password_change_required,false);assert.equal(updates.at(-1).attrs.app_metadata.provider,'email');
 n=updates.length;r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,403);assert.equal(updates.length,n);
 amr=[{method:'recovery',timestamp:Math.floor(Date.now()/1000)}];r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,200);assert.equal(updates.at(-1).attrs.app_metadata.password_recovery_completed_session,'recovery-session');
+amr=[{method:'otp',timestamp:Math.floor(Date.now()/1000)}];r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,200);
+amr=[{method:'password',timestamp:Math.floor(Date.now()/1000)}];r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,403);
+amr=[{method:'otp',timestamp:Math.floor(Date.now()/1000)+60}];r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,403);
 amr=[{method:'recovery',timestamp:1}];r=await invoke({action:'change_own_password',recovery:true,new_password:'test-new-password'});assert.equal(r.status,403);
 active=false;r=await invoke({action:'change_own_password',current_password:'test-temp',new_password:'test-new-password'});assert.equal(r.status,403);
 r=await invoke({action:'change_own_password'},false);assert.equal(r.status,401);

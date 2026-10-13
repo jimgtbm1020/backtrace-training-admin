@@ -58,11 +58,13 @@ Deno.serve(async (req: Request) => {
       const currentPassword = typeof body.current_password === "string" ? body.current_password : "";
       if (nextPassword.length < 8 || nextPassword.length > 128) return json({ error: "Use between 8 and 128 characters for your new password." }, 400);
       const recovery = body.recovery === true;
+      let recoverySession: string | undefined;
       if (recovery) {
         const { data: claimsData, error: claimsError } = await admin.auth.getClaims(token);
         const methods = claimsData?.claims?.amr as {method:string;timestamp:number}[] | undefined;
+        recoverySession = claimsData?.claims?.session_id as string | undefined;
         const now = Math.floor(Date.now()/1000);
-        if (claimsError || !methods?.some(m => m.method === "recovery" && m.timestamp <= now && now-m.timestamp <= 3600)) return json({ error: "Open a fresh password reset link from your email." }, 403);
+        if (claimsError || !recoverySession || !methods?.some(m => m.method === "recovery" && m.timestamp <= now && now-m.timestamp <= 3600)) return json({ error: "Open a fresh password reset link from your email." }, 403);
       } else {
         if (!currentPassword || !actor.email) return json({ error: "Enter your current or temporary password." }, 400);
         if (nextPassword === currentPassword) return json({ error: "Choose a new password different from your temporary or current password." }, 400);
@@ -73,7 +75,7 @@ Deno.serve(async (req: Request) => {
       }
       const { error: passwordError } = await admin.auth.admin.updateUserById(actor.id, {
         password: nextPassword,
-        app_metadata: { ...actor.app_metadata, password_change_required: false },
+        app_metadata: { ...actor.app_metadata, password_change_required: false, ...(recoverySession ? { password_recovery_completed_session: recoverySession } : {}) },
       });
       if (passwordError) return json({ error: passwordError.message }, 400);
       return json({ success: true });
@@ -243,7 +245,9 @@ Deno.serve(async (req: Request) => {
       if (!targetUserId) return json({ error: "Target user is required" }, 400);
       if (temporaryPassword.length < 10) return json({ error: "Temporary password must be at least 10 characters" }, 400);
 
-      const { error: resetError } = await admin.auth.admin.updateUserById(targetUserId, { password: temporaryPassword, app_metadata: { password_change_required: true } });
+      const { data: targetAuth, error: targetError } = await admin.auth.admin.getUserById(targetUserId);
+      if (targetError || !targetAuth.user) return json({ error: "User not found" }, 404);
+      const { error: resetError } = await admin.auth.admin.updateUserById(targetUserId, { password: temporaryPassword, app_metadata: { ...targetAuth.user.app_metadata, password_change_required: true } });
       if (resetError) return json({ error: resetError.message }, 400);
 
       const { error: auditError } = await admin.from("user_management_activity").insert({

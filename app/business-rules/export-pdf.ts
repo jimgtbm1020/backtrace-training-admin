@@ -21,12 +21,21 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(26,46,73);doc.text(chunk,margin+14,y+28);y+=height;continued=true;
   }
  }
+ function sourceLines(source:string):string[]{doc.setFont('helvetica','bold');doc.setFontSize(11);return doc.splitTextToSize(clean(source||'Not specified'),340);}
  function metadata(source:string,retention:string){
-  const left=wrap(source,340),right=wrap(retention,132),height=26+Math.max(left.length,right.length)*14;
-  if(height>bottom-y)nextPage(true);
-  if(height>bottom-y){paragraph('Data source',source);paragraph('Retention',retention);return;}
-  fill(height);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text('Data source',margin+14,y+13);doc.text('Retention',margin+382,y+13);
-  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(26,46,73);doc.text(left,margin+14,y+28);doc.text(right,margin+382,y+28);y+=height;
+  const left=sourceLines(source),right=wrap(retention,118);let continued=false;
+  while(left.length||right.length){
+   let capacity=Math.floor((bottom-y-32)/15);
+   if(capacity<1){nextPage(true);capacity=Math.floor((bottom-y-32)/15);}
+   const sourceChunk=left.splice(0,capacity),retentionChunk=right.splice(0,capacity),height=32+Math.max(sourceChunk.length,retentionChunk.length)*15;
+   doc.setFillColor(237,243,250);doc.rect(margin,y,width,height,'F');
+   doc.setFillColor(199,163,75);doc.rect(margin,y,3,height,'F');
+   doc.setDrawColor(212,223,237);doc.line(margin+370,y+8,margin+370,y+height-8);
+   doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(32,51,78);doc.text('Data source'+(continued?' (continued)':''),margin+14,y+15);doc.text('Retention',margin+382,y+15);
+   doc.setFontSize(11);if(sourceChunk.length)doc.text(sourceChunk,margin+14,y+31,{lineHeightFactor:15/11});
+   doc.setFont('helvetica','normal');doc.setFontSize(10);if(retentionChunk.length)doc.text(retentionChunk,margin+382,y+31,{lineHeightFactor:1.5});
+   y+=height;continued=true;
+  }
  }
  doc.setTextColor(91,107,127);doc.setFontSize(9);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
  doc.setTextColor(26,46,73);doc.setFontSize(22);doc.text('Agency Business Rules',margin,62);
@@ -39,7 +48,7 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   toolName=item.name;shade=index%2?[245,248,252]:[255,255,255];
   doc.setFont('helvetica','bold');doc.setFontSize(12);const title=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
   const retention=assignment.retention_value+' '+assignment.retention_unit.toLowerCase();
-  const metaHeight=26+Math.max(wrap(assignment.data_source,340).length,wrap(retention,132).length)*14;
+  const metaHeight=32+Math.max(sourceLines(assignment.data_source).length,wrap(retention,118).length)*15;
   const height=headerHeight+metaHeight+52+(wrap(item.description).length+wrap(item.expected_outcome).length)*14;
   if(y+height>bottom&&height<=bottom-52)nextPage();
   if(y+headerHeight+42>bottom)nextPage();

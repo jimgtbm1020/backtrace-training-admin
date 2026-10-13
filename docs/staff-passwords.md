@@ -2,13 +2,18 @@
 
 ## New accounts and administrator password resets
 1. An Administrator creates the account or generates a temporary password in User Management.
-2. Give the temporary password directly to the user.
+2. Create User automatically emails the user their sign-in email, temporary password, production sign-in link, and replacement instructions. Email Settings must be enabled and configured before creating an account.
 3. The user signs in with their email and temporary password.
 4. Before the application dashboard is shown, Account Setup asks for Temporary password, New password, and Confirm new password.
 5. Save password verifies the temporary password on the server, updates only that user's password, and clears the replacement requirement.
 6. The user continues to the dashboard and uses their new password for later sign-ins.
 
 Existing accounts are not automatically marked as temporary. To require replacement for an existing account, an Administrator can issue a new temporary password using Reset Password.
+
+## Account email status
+Create User reports whether Resend accepted the account email. Temporary passwords are not written to audit records; audit entries contain only the recipient, provider message ID, and success/failure state. Transient provider errors are retried using the same idempotency key.
+
+If delivery cannot be confirmed, the account remains created and the administrator sees a clear warning and the temporary password to provide directly. Do not create the user again. An administrator Reset Password still displays the new temporary password for direct sharing.
 
 ## Changing an existing password
 Open My Account and enter the current password, new password, and confirmation. Passwords must contain 8–128 characters and differ from the current password.

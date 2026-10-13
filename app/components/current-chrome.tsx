@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react';
 import {usePathname} from 'next/navigation';
 import {createClient, Session} from '@supabase/supabase-js';
 import styles from './current-chrome.module.css';
+import PasswordForm from './password-form';
 
 type Role = 'admin' | 'coordinator' | 'trainer' | 'viewer';
 
@@ -16,6 +17,8 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
   const [menu, setMenu] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [identityChecked,setIdentityChecked]=useState(false),[identityError,setIdentityError]=useState(''),[passwordRequired,setPasswordRequired]=useState(false),[recovery,setRecovery]=useState(false);
+  const identityRequest=useRef(0);
   const [role, setRole] = useState<Role | null>(null);
   const [version, setVersion] = useState('…');
   const [unread, setUnread] = useState(0);
@@ -34,13 +37,16 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
     const updateSession=(next:Session|null)=>{
       if(!mounted)return;
       profileRequest.current++;
-      setSession(next);setRole(null);setProfileUserId(null);
+      setSession(next);setRole(null);setProfileUserId(null);setIdentityError('');
+      const check=++identityRequest.current;
+      if(!next){setIdentityChecked(true);setPasswordRequired(false);setRecovery(false);}
+      else{setIdentityChecked(false);setTimeout(()=>{void supabase.auth.getUser().then(async({data,error})=>{if(!mounted||check!==identityRequest.current)return;if(error||!data.user){setIdentityError('Unable to verify your account. Sign out and sign in again.');setIdentityChecked(true);return;}const {data:claimsData,error:claimsError}=await supabase.auth.getClaims(next.access_token);if(!mounted||check!==identityRequest.current)return;if(claimsError)throw claimsError;const methods=claimsData?.claims?.amr as {method:string}[]|undefined;if(methods?.some(method=>method.method==='recovery')&&claimsData?.claims?.session_id!==data.user.app_metadata?.password_recovery_completed_session)setRecovery(true);setPasswordRequired(data.user.app_metadata?.password_change_required===true);setIdentityChecked(true);}).catch(()=>{if(mounted&&check===identityRequest.current){setIdentityError('Unable to verify your account. Sign out and sign in again.');setIdentityChecked(true);}});},0);}
       if(next?.user){void loadRole(next.user.id);void loadCurrentVersion();void loadUnread();}
       else setUnread(0);
     };
     supabase.auth.getSession().then(({data})=>updateSession(data.session));
-    const {data}=supabase.auth.onAuthStateChange((_event,next)=>updateSession(next));
-    return()=>{mounted=false;profileRequest.current++;data.subscription.unsubscribe();};
+    const {data}=supabase.auth.onAuthStateChange((event,next)=>{if(event==='PASSWORD_RECOVERY')setRecovery(true);updateSession(next);});
+    return()=>{mounted=false;profileRequest.current++;identityRequest.current++;data.subscription.unsubscribe();};
   }, []);
 
   useEffect(() => {
@@ -81,9 +87,10 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
 
   async function loadRole(id: string) {
     const request=++profileRequest.current;
-    const {data,error} = await supabase.from('profiles').select('role,active').eq('id', id).maybeSingle();
+    const [{data,error},identity] = await Promise.all([supabase.from('profiles').select('role,active').eq('id', id).maybeSingle(),supabase.auth.getUser()]);
     if(request!==profileRequest.current)return;
-    const allowed=!error&&data?.active&&['admin','coordinator','trainer','viewer'].includes(data.role);
+    if(!identity.error&&identity.data.user?.id===id)setPasswordRequired(identity.data.user.app_metadata?.password_change_required===true);
+    const allowed=!identity.error&&identity.data.user?.id===id&&!error&&data?.active&&['admin','coordinator','trainer','viewer'].includes(data.role);
     setRole(allowed?data.role as Role:null);setProfileUserId(allowed?id:null);
   }
 
@@ -108,7 +115,10 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
 
   const canAccessBusinessRules=!!session?.user&&profileUserId===session.user.id&&['admin','coordinator','trainer','viewer'].includes(role||'');
 
+  if(!identityChecked)return <main className="shell"><section className="card"><p role="status">Checking sign-in…</p></section></main>;
+  if(identityError)return <main className="shell"><section className="card"><p role="alert">{identityError}</p><button onClick={()=>void signOut()}>Sign out</button></section></main>;
   if (!session) return <>{children}</>;
+  if(passwordRequired||recovery)return <main className="shell"><h1>Backtrace Account Setup</h1><p>{session.user.email}</p><PasswordForm client={supabase} required={passwordRequired} recovery={recovery} onSaved={()=>window.location.assign('/')}/><button onClick={()=>void signOut()}>Sign out</button></main>;
 
   return (
     <>

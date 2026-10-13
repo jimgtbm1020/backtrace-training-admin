@@ -89,8 +89,9 @@ export default function AgencyBusinessRulesPage(){
   try{
    const payload={...itemForm,name:itemForm.name.trim().replace(/\s+/g,' '),description:itemForm.description.trim(),expected_outcome:itemForm.expected_outcome.trim(),updated_by:userId};
    if(!payload.name||!payload.description)throw new Error('Item name and description are required.');
+   if(items.some(row=>row.id!==editingItem?.id&&row.name.trim().replace(/\s+/g,' ').toLowerCase()===payload.name.toLowerCase()))throw new Error('This item name already exists. Choose it from Item name to update it.');
    const result=editingItem?await supabase.from('resource_items').update(payload).eq('id',editingItem.id).eq('updated_at',editingItem.updated_at).select('id').maybeSingle():await supabase.from('resource_items').insert({...payload,created_by:userId}).select('id').single();
-   if(result.error)throw new Error(result.error.code==='23505'?'This item name and type already exist. Edit the saved item below.':result.error.message);
+   if(result.error)throw new Error(result.error.code==='23505'?'This item name already exists. Choose it from Item name to update it.':result.error.message);
    if(!result.data)throw new Error('This item changed or is unavailable. Refresh and review it before saving.');
    setEditingItem(null);setItemForm(blankItem);if(await load()){setMessage('Item saved.');}
   }catch(e){setError(e instanceof Error?e.message:'Unable to save item.');}finally{setBusy(false);}
@@ -129,10 +130,12 @@ export default function AgencyBusinessRulesPage(){
    <p className={styles.description}>{descriptions.items}</p>
    {canManage&&<form className={styles.panel} onSubmit={saveItem}><h2>{editingItem?'Edit item':'Create item'}</h2><fieldset className={styles.fields} disabled={disabled}>
     <label>Item type<select value={itemForm.item_type} onChange={e=>setItemForm({...itemForm,item_type:e.target.value})}>{['Tool','Dashboard','Smart Tool','Misc.'].map(t=><option key={t}>{t}</option>)}</select></label>
-    <label>Item name<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
+    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{setEditingItem(null);setItemForm(blankItem);setMessage('');}}}><option value="">Create new item</option>{items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+    <label className={styles.full}>{editingItem?'Update item name':'New item name'}<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
+    <p className={styles.full}>Choose an existing item to update its saved details, or choose Create new item and enter a unique name.</p>
     <label className={styles.full}>Description<textarea required maxLength={4000} rows={3} value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})}/></label>
     <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={3} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
-    <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':'Save item'}</button><button type="button" onClick={()=>{setEditingItem(null);setItemForm(blankItem);}}>New item</button></div>
+    <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{setEditingItem(null);setItemForm(blankItem);setError('');setMessage('');}}>New item</button></div>
    </fieldset></form>}
    <div className={styles.panel}><h2>Saved items</h2>{items.map(row=><div className={styles.row} key={row.id}><div><span className={styles.badge}>{row.item_type}</span><h3>{row.name}</h3><p>{row.description}</p>{row.expected_outcome&&<p><strong>Expected outcome:</strong> {row.expected_outcome}</p>}</div>{canManage&&<button disabled={disabled} onClick={()=>editItem(row)}>Edit</button>}</div>)}{!loading&&!items.length&&<p>No items saved yet.</p>}</div>
   </section>

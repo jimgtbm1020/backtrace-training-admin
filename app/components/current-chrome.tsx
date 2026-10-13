@@ -141,6 +141,8 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
           Dashboard
         </a>
 
+        {profileUserId===session.user.id&&role&&<a className={pathname==='/account'?'active':''} href="/account">My Account</a>}
+
         <div className={styles.navMenu}>
           <button
             className={triggerClass(
@@ -218,7 +220,7 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
           <div className={styles.navMenu}>
             <button
               className={triggerClass(
-                ['/account', '/user-management', '/activity', '/bug-reports', '/request-activity', '/health', '/email-settings', '/test-data-cleanup'].some(
+                ['/user-management', '/activity', '/bug-reports', '/request-activity', '/health', '/email-settings', '/test-data-cleanup'].some(
                   (path) => pathname.startsWith(path),
                 ),
               )}
@@ -231,7 +233,6 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
             {menu === 'admin' && (
               <div className={styles.dropdown}>
                 <div className={styles.sectionTitle}>Administration</div>
-                <a className={itemClass('/account')} href="/account">Administrator Account</a>
                 <a className={itemClass('/user-management')} href="/user-management">User Management</a>
                 <a className={itemClass('/activity')} href="/activity">Activity Log</a>
                 <a className={itemClass('/bug-reports')} href="/bug-reports">Bug Reports</a>

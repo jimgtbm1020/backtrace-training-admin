@@ -1,0 +1,29 @@
+# Staff passwords and account recovery
+
+## New accounts and administrator password resets
+1. An Administrator creates the account or generates a temporary password in User Management.
+2. Give the temporary password directly to the user.
+3. The user signs in with their email and temporary password.
+4. Before the application dashboard is shown, Account Setup asks for Temporary password, New password, and Confirm new password.
+5. Save password verifies the temporary password on the server, updates only that user's password, and clears the replacement requirement.
+6. The user continues to the dashboard and uses their new password for later sign-ins.
+
+Existing accounts are not automatically marked as temporary. To require replacement for an existing account, an Administrator can issue a new temporary password using Reset Password.
+
+## Changing an existing password
+Open My Account and enter the current password, new password, and confirmation. Passwords must contain 8–128 characters and differ from the current password.
+
+## Forgotten passwords
+Enter the registered email on the sign-in page and choose Forgot password?. Check the inbox and spam folder. Open the secure recovery link and choose a new password without entering the forgotten password. An invalid or expired link requires a fresh request. The interface waits 60 seconds before permitting another request; Supabase also applies its Auth rate limits.
+
+The server requires a verified, recent recovery authentication method before accepting a reset without the current password. Reset requests show a generic response to avoid revealing whether an email has an account.
+
+## Permissions and implementation
+Only active Administrators, Coordinators, Trainers, and Viewers can save a password. The server obtains the target identity from the validated user token rather than accepting a target user ID. The replacement flag is held in administrator-controlled app metadata, not user-editable metadata. The application shell blocks dashboard rendering during required setup and recovery.
+
+Password values are handled by Supabase Auth. They are not stored in application tables, local storage, audit records, or logs. Fields clear after saving. All existing role and database permissions remain in effect.
+
+## Validation and rollout
+TypeScript, production build, actual React form/gate tests, and server-function tests passed. Tests cover incorrect current passwords, mismatched confirmation, replacement flags on create/reset, self-only updates, spoofed and expired recovery claims, and inactive/anonymous access denial. No real passwords or reset emails were used in these tests.
+
+Deploy the updated manage-training-users Edge Function and the matching application release together. Confirm password recovery delivery using an authorized test mailbox after deployment; actual mailbox delivery remains unverified.

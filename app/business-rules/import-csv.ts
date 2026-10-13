@@ -1,5 +1,5 @@
 import {Agency} from './types';
-export type ImportRow={agency_name:string;agency_address:string;agency_city:string;agency_state:string;agency_zip:string};
+export type ImportRow={agency_name:string};
 export const agencyKey=(name:string)=>name.trim().replace(/\s+/g,' ').toLowerCase();
 export function parseAgencyCsv(text:string):ImportRow[]{
  const rows:string[][]=[];let row:string[]=[],cell='',quoted=false,closed=false;
@@ -16,15 +16,16 @@ export function parseAgencyCsv(text:string):ImportRow[]{
  if(rows.length<2)throw new Error('The CSV needs a header and at least one agency.');
  const expected=['Agency Name','Street Address','City','State','ZIP'];
  const headers=rows.shift()!.map(x=>x.toLowerCase());
- if(headers.length!==5||expected.some(h=>!headers.includes(h.toLowerCase())))throw new Error('Use the CSV columns: Agency Name, Street Address, City, State, ZIP.');
+ const nameOnly=headers.length===1&&headers[0]==='agency name';
+ const legacy=headers.length===5&&expected.every(h=>headers.includes(h.toLowerCase()));
+ if(!nameOnly&&!legacy)throw new Error('Use a CSV with one column: Agency Name.');
  if(rows.length>500)throw new Error('Import up to 500 agencies at a time.');
  return rows.map((r,i)=>{
-  if(r.length!==headers.length)throw new Error(`Row ${i+2}: expected five fields.`);
-  const fields=expected.map(h=>r[headers.indexOf(h.toLowerCase())]);
-  fields[0]=fields[0].replace(/\s+/g,' ');
-  if(!fields[0])throw new Error(`Row ${i+2}: Agency Name is required.`);
-  if(fields.some((v,j)=>v.length>[160,250,120,60,20][j]))throw new Error(`Row ${i+2}: a field exceeds its allowed length.`);
-  return {agency_name:fields[0],agency_address:fields[1],agency_city:fields[2],agency_state:fields[3],agency_zip:fields[4]};
+  if(r.length!==headers.length)throw new Error(`Row ${i+2}: expected ${headers.length} field${headers.length===1?'':'s'}.`);
+  const name=r[headers.indexOf('agency name')].replace(/\s+/g,' ');
+  if(!name)throw new Error(`Row ${i+2}: Agency Name is required.`);
+  if(name.length>160)throw new Error(`Row ${i+2}: Agency Name exceeds 160 characters.`);
+  return {agency_name:name};
  });
 }
 export function previewAgencies(rows:ImportRow[],agencies:Agency[]){

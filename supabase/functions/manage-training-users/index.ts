@@ -24,6 +24,38 @@ function generateTemporaryPassword() {
   return Array.from(bytes, (b) => chars[b % chars.length]).join("");
 }
 
+
+function escapeHtml(value:string){return value.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));}
+
+async function sendAccountCredentials(settings:{api_key:string;from_email:string;from_name:string},userId:string,email:string,fullName:string,password:string){
+  const signInUrl="https://backtrace-training-admin.vercel.app/";
+  const text=`Hello ${fullName},
+
+Your Backtrace Training Administration account is ready.
+
+Sign-in email: ${email}
+Temporary password: ${password}
+Sign in: ${signInUrl}
+
+1. Sign in using your email and temporary password.
+2. Enter the temporary password again on the Account Setup screen.
+3. Enter and confirm your new password, then select Save password.
+
+You must replace the temporary password before accessing the dashboard.
+If you were not expecting this account, contact your administrator.`;
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Your Backtrace Training account</title></head><body style="margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#20334e"><div style="display:none;max-height:0;overflow:hidden">Your new account is ready. Sign in and choose your own password.</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:auto;background:#fff;border:1px solid #dce4ed;border-radius:10px"><tr><td style="padding:28px"><h1 style="font-size:24px;line-height:1.3;margin:0 0 20px">Your Backtrace Training account</h1><p style="font-size:16px;line-height:1.5">Hello ${escapeHtml(fullName)},</p><p style="font-size:16px;line-height:1.5">Your Training Administration account is ready.</p><div style="padding:16px;background:#edf3fa;border-left:3px solid #c7a34b"><p style="margin:0 0 12px;font-size:16px"><strong>Sign-in email:</strong> ${escapeHtml(email)}</p><p style="margin:0;font-size:16px"><strong>Temporary password:</strong><br><span style="font-family:monospace;font-size:20px;overflow-wrap:anywhere">${escapeHtml(password)}</span></p></div><p style="margin:24px 0"><a href="${signInUrl}" style="display:inline-block;box-sizing:border-box;background:#254d7e;color:#fff;text-decoration:none;padding:14px 20px;border-radius:6px;font-size:16px;font-weight:bold">Sign in to Backtrace</a></p><ol style="font-size:16px;line-height:1.6;padding-left:22px"><li>Sign in with your email and temporary password.</li><li>Enter the temporary password again on Account Setup.</li><li>Enter and confirm your new password, then select <strong>Save password</strong>.</li></ol><p style="font-size:16px;line-height:1.5"><strong>You must replace the temporary password before accessing the dashboard.</strong></p><p style="font-size:14px;line-height:1.5">If you were not expecting this account, contact your administrator.</p><p style="font-size:14px;line-height:1.5">Sign-in address: <a href="${signInUrl}">${signInUrl}</a></p></td></tr></table></td></tr></table></body></html>`;
+  const from=settings.from_name?`${settings.from_name} <${settings.from_email}>`:settings.from_email;
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":`Bearer ${settings.api_key}`,"Content-Type":"application/json","Idempotency-Key":`training-account/${userId}`},body:JSON.stringify({from,to:[email],subject:"Your Backtrace Training account and temporary password",html,text}),signal:AbortSignal.timeout(10000)});
+      const result=await response.json().catch(()=>({}));
+      if(response.ok&&typeof result.id==="string")return result.id;
+      if(response.status<500&&response.status!==429)return null;
+    }catch{}
+  }
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -101,6 +133,9 @@ Deno.serve(async (req: Request) => {
       if (!validRole(role)) return json({ error: "Invalid role" }, 400);
       if (temporaryPassword.length < 10) return json({ error: "Temporary password must be at least 10 characters" }, 400);
 
+      const { data: emailSettings, error: emailSettingsError } = await admin.from("training_email_provider_settings").select("provider,enabled,api_key,from_email,from_name").eq("id",1).single();
+      if(emailSettingsError||!emailSettings?.enabled||emailSettings.provider!=="resend"||!emailSettings.api_key||!emailSettings.from_email)return json({error:"Account email delivery is not configured or enabled. Configure Email Settings before creating users."},503);
+
       const { data: created, error: createError } = await admin.auth.admin.createUser({
         email,
         password: temporaryPassword,
@@ -149,10 +184,15 @@ Deno.serve(async (req: Request) => {
         }, 500);
       }
 
+      const emailId=await sendAccountCredentials(emailSettings,newUserId,email,fullName,temporaryPassword);
+      const {error:emailAuditError}=await admin.from("user_management_activity").insert({actor_id:actor.id,target_user_id:newUserId,action:emailId?"user_credentials_emailed":"user_credentials_email_failed",details:{recipient:email,provider:"resend",provider_message_id:emailId}});
+      if(emailAuditError)console.error("account_email_audit_failed");
       return json({
         success: true,
         user: { id: newUserId, email, full_name: fullName, role, active: true },
         temporary_password: temporaryPassword,
+        email_sent: !!emailId,
+        ...(emailId?{}:{warning:"User account was created, but the account email could not be confirmed. Do not create the user again. Provide the displayed temporary password directly to the user."}),
       });
     }
 

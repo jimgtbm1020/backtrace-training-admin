@@ -44,7 +44,15 @@ export default function CurrentChrome({children}: {children: React.ReactNode}) {
       if(next?.user){void loadRole(next.user.id);void loadCurrentVersion();void loadUnread();}
       else setUnread(0);
     };
-    supabase.auth.getSession().then(({data})=>updateSession(data.session));
+    const recoveryHash=new URLSearchParams(window.location.hash.slice(1)).get('backtrace_recovery');
+    if(recoveryHash){
+      window.history.replaceState(null,'',window.location.pathname+window.location.search);
+      void supabase.auth.verifyOtp({token_hash:recoveryHash,type:'recovery'}).then(({data,error})=>{
+        if(!mounted)return;
+        if(error||!data.session){setIdentityError('This password reset link is expired or already used. Request a new link from the sign-in page.');setIdentityChecked(true);return;}
+        setRecovery(true);updateSession(data.session);
+      });
+    }else supabase.auth.getSession().then(({data})=>updateSession(data.session));
     const {data}=supabase.auth.onAuthStateChange((event,next)=>{if(event==='PASSWORD_RECOVERY')setRecovery(true);updateSession(next);});
     return()=>{mounted=false;profileRequest.current++;identityRequest.current++;data.subscription.unsubscribe();};
   }, []);

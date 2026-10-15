@@ -19,7 +19,7 @@ If delivery cannot be confirmed, the account remains created and the administrat
 Open My Account and enter the current password, new password, and confirmation. Passwords must contain 8–128 characters and differ from the current password.
 
 ## Forgotten passwords
-Enter the registered email on the sign-in page and choose Forgot password?. Check the inbox and spam folder. Open the secure recovery link and choose a new password without entering the forgotten password. An invalid or expired link requires a fresh request. The interface waits 60 seconds before permitting another request; Supabase also applies its Auth rate limits.
+Enter the registered email on the sign-in page and choose Forgot password?. Check the inbox and spam folder. Open the secure recovery link and choose a new password without entering the forgotten password. An invalid or expired link requires a fresh request. The interface waits 60 seconds before permitting another request; the server also limits requests per email, IP address, and application.
 
 The server requires a verified, recent recovery authentication method before accepting a reset without the current password. Reset requests show a generic response to avoid revealing whether an email has an account.
 
@@ -31,4 +31,4 @@ Password values are handled by Supabase Auth. They are not stored in application
 ## Validation and rollout
 TypeScript, production build, actual React form/gate tests, and server-function tests passed. Tests cover incorrect current passwords, mismatched confirmation, replacement flags on create/reset, self-only updates, spoofed and expired recovery claims, and inactive/anonymous access denial. No real passwords or reset emails were used in these tests.
 
-Deploy the updated manage-training-users Edge Function and the matching application release together. Confirm password recovery delivery using an authorized test mailbox after deployment; actual mailbox delivery remains unverified.
+Deploy manage-training-users and request-password-reset with the matching application release. The public reset handler generates a Supabase recovery token, sends it through the configured Resend sender, and returns the same response for unknown accounts. The token is carried in the URL fragment, removed before verification, and consumed using Supabase verifyOtp. The manage-training-users handler validates each bearer token with Auth getUser, allowing current asymmetric signing keys without relying on the gateway legacy-JWT check. Confirm password recovery delivery using an authorized test mailbox after deployment; actual mailbox delivery remains unverified.

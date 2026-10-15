@@ -29,7 +29,7 @@ export default function Home(){
  async function forgotPassword(){
   if(loading||resetCooldown)return;if(!email.trim()){setError('Enter your email address, then choose Forgot password?');return;}
   setLoading(true);setError('');setResetNotice('');
-  try{const {error:resetError}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:'https://backtrace-training-admin.vercel.app/'});if(resetError)throw resetError;setResetCooldown(60);setResetNotice('If an account exists for this email, a password reset link will be sent. Check your inbox and spam folder.');}
+  try{const {error:resetError}=await supabase.functions.invoke('request-password-reset',{body:{email:email.trim()}});if(resetError)throw resetError;setResetCooldown(60);setResetNotice('If an account exists for this email, a password reset link will be sent. Check your inbox and spam folder.');}
   catch{setError('Unable to request a password reset. Please wait a moment and try again.');}finally{setLoading(false);}
  }
  async function signIn(){setLoading(true);setError('');const {data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setError(error.message);else{setSession(data.session);if(data.user)void loadProfile(data.user.id)}setLoading(false)}

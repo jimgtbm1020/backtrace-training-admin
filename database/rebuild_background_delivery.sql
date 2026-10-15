@@ -2,7 +2,7 @@
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 create function public.configure_backtrace_delivery(p_key text) returns void language plpgsql security definer set search_path='' as $$begin
- if length(p_key)<100 then raise exception 'Invalid scheduler credential';end if;
+ if p_key is null or length(p_key)<32 then raise exception 'Invalid scheduler credential';end if;
  if exists(select 1 from vault.secrets where name='backtrace_delivery_key') then raise exception 'Scheduler credential is already configured';end if;
  perform vault.create_secret(p_key,'backtrace_delivery_key','Server-only Backtrace background delivery');end$$;
 revoke all on function public.configure_backtrace_delivery(text) from public,anon,authenticated;

@@ -19,3 +19,5 @@
 .reportItem dl>div:first-child dd{font-size:15px;font-weight:700;color:#20334e;line-height:1.45}
 .reportItem dl>div:nth-child(2) dd{color:#20334e}
 @media(max-width:600px){.reportItem dl>div:first-child,.reportItem dl>div:nth-child(2){border-radius:6px}.reportItem dl>div:nth-child(2){border-left:3px solid #d4dfed}}
+
+.overview{margin:20px 0;padding:24px;background:#edf3fa;border-left:4px solid #c7a34b;border-radius:8px;color:#1a2e49;overflow-wrap:anywhere}.overview h3{margin-top:0}.overview p,.overview li{line-height:1.65}.overview ul{margin:8px 0;padding-left:24px}

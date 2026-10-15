@@ -1,4 +1,5 @@
 import {jsPDF} from 'jspdf';
+import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
 import {Agency,Item,Assignment,agencyAddress} from './types';
 
 export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[]){
@@ -42,6 +43,27 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
  doc.setFontSize(14);const names=doc.splitTextToSize(clean(agency.agency_name),width);doc.text(names,margin,88);y=88+names.length*17;
  doc.setFontSize(10);const address=doc.splitTextToSize(clean(agencyAddress(agency)),width);doc.text(address,margin,y);y+=address.length*14+18;
  doc.setDrawColor(210,220,233);doc.line(margin,y-8,margin+width,y-8);
+ if(hasOverview(agency)){
+  toolName=agency.overview_heading||defaultOverviewHeading;
+  doc.setFont('helvetica','bold');doc.setFontSize(15);
+  const heading=doc.splitTextToSize(clean(toolName),width-28);doc.setTextColor(26,46,73);doc.text(heading,margin+14,y+18);y+=heading.length*19+14;
+  for(const block of [...overviewBlocks(agency.overview_introduction||''),...overviewBlocks(agency.overview_features||'')]){
+   let x=margin+14+(block.bullet?12:0);const startX=x,right=margin+width-14;
+   if(y+18>bottom)nextPage(true);
+   doc.setFontSize(10);doc.setTextColor(26,46,73);
+   if(block.bullet){doc.setFont('helvetica','normal');doc.text('-',margin+14,y);}
+   for(const span of overviewSpans(block.text)){
+    for(const word of clean(span.text).split(/(\s+)/).filter(Boolean)){
+     doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);
+     if(word.trim()&&doc.getTextWidth(word)<=right-startX&&x+doc.getTextWidth(word)>right){x=startX;y+=14;if(y+14>bottom){nextPage(true);doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);doc.setTextColor(26,46,73);}}
+     // Character wrapping also handles long unbroken identifiers without clipping.
+     for(const char of word){const w=doc.getTextWidth(char);if(x+w>right){x=startX;y+=14;if(y+14>bottom){nextPage(true);doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);doc.setTextColor(26,46,73);}}if(x===startX&&/\s/.test(char))continue;doc.text(/\s/.test(char)?' ':char,x,y);x+=w;}
+    }
+   }
+   y+=24;
+  }
+  y+=10;
+ }
  const matches=assignments.filter(a=>a.agency_id===agency.id).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
  matches.forEach((assignment,index)=>{
   const item=items.find(i=>i.id===assignment.item_id);if(!item)throw new Error('An assigned item is unavailable. Refresh before exporting.');

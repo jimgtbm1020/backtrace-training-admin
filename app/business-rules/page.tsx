@@ -4,6 +4,7 @@ import {FormEvent,useEffect,useRef,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 import {Agency,Item,Assignment,agencyLocation} from './types';
 import styles from './rules.module.css';
+import AgencyOverview,{OverviewEditor} from './agency-overview';
 import AssignmentWorkspace from './assignment-workspace';
 import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
@@ -11,7 +12,7 @@ const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NE
 const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency Item Assignment'],['report','Agency Business Rules Report']] as const;
 type Tab=typeof tabs[number][0];
 const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency once, select multiple tools, and save their individual data sources and retention periods together. Use Assigned to review or edit existing rules.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
-const blankAgency={agency_name:''};
+const blankAgency={agency_name:'',overview_heading:'Core Features (Quick Overview)',overview_introduction:'',overview_features:''};
 const blankItem={name:'',item_type:'Tool',description:'',expected_outcome:''};
 
 async function allRows<T>(fetchPage:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>){
@@ -37,7 +38,7 @@ export default function AgencyBusinessRulesPage(){
   setLoading(true);setError('');
   try{
    const [a,i,s]=await Promise.all([
-    allRows<Agency>((from,to)=>supabase.from('business_rules_agencies').select('id,agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,active,updated_at').order('agency_name').order('id').range(from,to)),
+    allRows<Agency>((from,to)=>supabase.from('business_rules_agencies').select('id,agency_name,agency_address,city_state_zip,agency_city,agency_state,agency_zip,active,updated_at,overview_heading,overview_introduction,overview_features').order('agency_name').order('id').range(from,to)),
     allRows<Item>((from,to)=>supabase.from('resource_items').select('id,name,item_type,description,expected_outcome,updated_at').order('name').order('id').range(from,to)),
     allRows<Assignment>((from,to)=>supabase.from('agency_item_assignments').select('id,agency_id,item_id,data_source,retention_value,retention_unit,updated_at').order('id').range(from,to))
    ]);
@@ -62,7 +63,7 @@ export default function AgencyBusinessRulesPage(){
   return()=>{mounted=false;listener.subscription.unsubscribe();};
  },[]);
 
- function editAgency(row:Agency){setEditingAgency(row);setAgencyForm({agency_name:row.agency_name});setTab('agencies');setMessage('');}
+ function editAgency(row:Agency){setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,overview_heading:row.overview_heading||blankAgency.overview_heading,overview_introduction:row.overview_introduction||'',overview_features:row.overview_features||''});setTab('agencies');setMessage('');}
  function editItem(row:Item){setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
  async function previewImport(file:File){
   setError('');setMessage('');setImportRows([]);setImportFile('');
@@ -77,7 +78,7 @@ export default function AgencyBusinessRulesPage(){
   try{
    const name=agencyForm.agency_name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Agency name is required.');
    if(agencies.some(a=>a.id!==editingAgency?.id&&a.agency_name.trim().replace(/\s+/g,' ').toLowerCase()===name.toLowerCase()))throw new Error('This agency already exists. Edit it in the list below.');
-   const payload={agency_name:name,updated_by:userId};
+   const payload={...agencyForm,agency_name:name,updated_by:userId};
    const result=editingAgency?await supabase.from('business_rules_agencies').update(payload).eq('id',editingAgency.id).eq('updated_at',editingAgency.updated_at).select('id').maybeSingle():await supabase.from('business_rules_agencies').insert({...payload,created_by:userId}).select('id').single();
    if(result.error)throw new Error(result.error.code==='23505'?'This agency already exists. Edit it in the list below.':result.error.message);
    if(!result.data)throw new Error('This agency changed or is unavailable. Refresh and review it before saving.');
@@ -121,6 +122,7 @@ export default function AgencyBusinessRulesPage(){
    <p className={styles.description}>{descriptions.agencies}</p>
    {canManage&&<form className={styles.panel} onSubmit={saveAgency}><div className={styles.importHeading}><h2>{editingAgency?'Edit agency':'Create agency'}</h2><button type="button" className={styles.primary+' '+styles.uploadButton} disabled={disabled} onClick={()=>importInput.current?.click()}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4"/></svg><span>Upload CSV</span></button></div><input ref={importInput} type="file" accept=".csv,text/csv" hidden aria-label="Agency import CSV" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void previewImport(file);}}/><p className={styles.description}>Choose your agency CSV to preview and import records. Use one column: Agency Name. Existing agencies are skipped. Older CSV address columns are ignored.</p><fieldset className={styles.fields} disabled={disabled}>
     <label className={styles.full}>Agency name<input required maxLength={160} value={agencyForm.agency_name} onChange={e=>setAgencyForm({...agencyForm,agency_name:e.target.value})}/></label>
+    <OverviewEditor value={agencyForm} onChange={value=>setAgencyForm({...agencyForm,...value})} agencies={agencies.filter(a=>a.id!==editingAgency?.id)} />
     <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':'Save agency'}</button><button type="button" onClick={()=>{setEditingAgency(null);setAgencyForm(blankAgency);}}>New agency</button></div>
    </fieldset></form>}
    {canManage&&importRows.length>0&&<section className={styles.panel} aria-label="Agency import preview"><h2>Review import</h2><p>{importFile} · {importPreview.filter(r=>!r.duplicate).length} new · {importPreview.filter(r=>r.duplicate).length} duplicates to skip</p><p className={styles.description}>Review spelling and abbreviations against existing agencies below. Different names need review before importing. Existing records and business rules will not be changed.</p><div className={styles.importTable}><table><thead><tr><th>Agency</th><th>Action</th></tr></thead><tbody>{importPreview.map((r,i)=><tr key={i}><td>{r.agency_name}</td><td>{r.duplicate?'Skip duplicate':<button disabled={disabled} type="button" onClick={()=>setImportRows(rows=>rows.filter((_,j)=>j!==i))}>Exclude row</button>}</td></tr>)}</tbody></table></div><div className={styles.actions}><button className={styles.primary} disabled={disabled||importPreview.every(r=>r.duplicate)} onClick={()=>void importAgencies()}>{busy?'Importing…':'Import new agencies'}</button><button disabled={disabled} onClick={()=>{setImportRows([]);setImportFile('');}}>Cancel import</button></div></section>}
@@ -147,7 +149,7 @@ export default function AgencyBusinessRulesPage(){
   <section id="rules-panel-report" role="tabpanel" aria-labelledby="rules-tab-report" hidden={tab!=='report'}>
    <p className={styles.description}>{descriptions.report}</p>
    <div className={styles.toolbar}><label>Report for agency<select value={reportAgencyId} disabled={disabled} onChange={e=>setReportAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option value={a.id} key={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label><button className={styles.primary} disabled={disabled||!reportAgency||!!error} onClick={()=>void exportPdf()}>{busy?'Exporting…':'Export PDF'}</button></div>
-   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header><h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header>{reportAssignments.map(a=>{const item=items.find(i=>i.id===a.item_id);return <article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h3>{item?.name||'Unavailable item'}</h3><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source}</dd></div><div><dt>Retention</dt><dd>{a.retention_value} {a.retention_unit.toLowerCase()}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>;})}{!reportAssignments.length&&<p>No items assigned to this agency.</p>}</div>}
+   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header><h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}{reportAssignments.map(a=>{const item=items.find(i=>i.id===a.item_id);return <article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h3>{item?.name||'Unavailable item'}</h3><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source}</dd></div><div><dt>Retention</dt><dd>{a.retention_value} {a.retention_unit.toLowerCase()}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>;})}{!reportAssignments.length&&<p>No items assigned to this agency.</p>}</div>}
   </section>
  </main>;
 }

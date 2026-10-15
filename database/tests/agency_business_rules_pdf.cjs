@@ -11,3 +11,10 @@ const long=buildAgencyRulesPdf(agency,longItems,assignments.filter(a=>a.item_id=
 const none=buildAgencyRulesPdf(agency,items,[]);assert.equal(none.getNumberOfPages(),1);assert(none.output().includes('No items assigned to this agency.'));
 if(process.env.REGISTRY_QA_PDF_DIR){fs.mkdirSync(process.env.REGISTRY_QA_PDF_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'compact.pdf'),Buffer.from(compact.output('arraybuffer')));fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'long.pdf'),Buffer.from(long.output('arraybuffer')));}
 console.log('PDF checks passed: compact two-item report, agency isolation, empty report, and long-content continuation.');
+
+const overviewAgency={...agency,overview_heading:'Core Features',overview_introduction:'Agency-specific introduction.',overview_features:'- **Person Reports** with source links.\n- **Data Integration** across records.\n\nIndependent agency wording.'};
+const overview=buildAgencyRulesPdf(overviewAgency,items,assignments);
+assert(overview.output().includes('Core Features'));
+assert(!compact.output().includes('Core Features'));
+const lengthy=buildAgencyRulesPdf({...overviewAgency,overview_features:overviewAgency.overview_features.repeat(60)},items,assignments);assert(lengthy.getNumberOfPages()>2);
+if(process.env.REGISTRY_QA_PDF_DIR){fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'overview.pdf'),Buffer.from(overview.output('arraybuffer')));fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'overview-long.pdf'),Buffer.from(lengthy.output('arraybuffer')));}

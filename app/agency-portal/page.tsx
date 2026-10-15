@@ -2,9 +2,9 @@
 import {useEffect,useState} from 'react';
 
 type Module={id:number;module_name:string;category:string;duration_minutes:number};
-const ENDPOINT='https://wfkvcpclzhxdvknybvyb.supabase.co/functions/v1/agency-training-portal';
+const ENDPOINT=process.env.NEXT_PUBLIC_SUPABASE_URL+'/functions/v1/agency-training-portal';
 const resources=['Projector (No Cables)','Projector (With Cables)','TV (HDMI Cable Needed)','TV (HDMI Cable Available)','Wi-Fi','Computer with Wi-Fi','No Wi-Fi'];
-const types=[['basic','Basic Backtrace Search Techniques (1 Hour 30 Minutes)'],['trainTrainer','Train the Trainer Course (8 Hours)'],['refresher','Refresher Course'],['advanced','Advanced Training']];
+const types=[['basic','Basic Backtrace Search Techniques (4 Hours)'],['trainTrainer','Train the Trainer Course (8 Hours)'],['refresher','Refresher Course'],['advanced','Advanced Training']];
 const empty={contact_person:'',contact_phone:'',contact_email:'',trainer_contact_name:'',trainer_contact_email:'',trainer_contact_phone:'',preferred_date:'',alternate_date:'',preferred_start_time:'',preferred_end_time:'',time_zone:'Eastern',training_format:'In Person',estimated_attendees:'',training_location:'',training_resources:[] as string[]};
 export default function AgencyPortalPage(){
  const [token,setToken]=useState(''),[agency,setAgency]=useState<any>(null),[modules,setModules]=useState<Module[]>([]),[form,setForm]=useState(empty),[type,setType]=useState(''),[selected,setSelected]=useState<number[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState<any>(null);
@@ -12,7 +12,7 @@ export default function AgencyPortalPage(){
  useEffect(()=>{const t=new URLSearchParams(window.location.search).get('token')||'';setToken(t);if(!t){setLoading(false);setError('This page must be opened using the secure agency link provided by Backtrace Training.');return}(async()=>{try{const d=await call({action:'validate',token:t});setAgency(d.agency);setModules(d.modules||[])}catch(e){setError(e instanceof Error?e.message:'Unable to open portal.')}setLoading(false)})()},[]);
  const update=(k:string,v:string)=>setForm(x=>({...x,[k]:v}));
  const toggleResource=(v:string)=>setForm(x=>({...x,training_resources:x.training_resources.includes(v)?x.training_resources.filter(y=>y!==v):[...x.training_resources,v]}));
- const toolBased=type==='refresher'||type==='advanced';const total=type==='basic'?90:type==='trainTrainer'?480:selected.reduce((n,id)=>n+(modules.find(m=>m.id===id)?.duration_minutes||20),0);
+ const toolBased=type==='refresher'||type==='advanced';const total=type==='basic'?240:type==='trainTrainer'?480:selected.reduce((n,id)=>n+(modules.find(m=>m.id===id)?.duration_minutes||20),0);
  async function submit(e:React.FormEvent){e.preventDefault();setError('');if(Boolean(form.preferred_start_time)!==Boolean(form.preferred_end_time)){setError('Enter both Start Time and End Time, or leave both blank.');return;}setBusy(true);try{const d=await call({action:'submit',token,data:{...form,estimated_attendees:form.estimated_attendees?Number(form.estimated_attendees):null,basic_training:type==='basic',train_the_trainer:type==='trainTrainer',refresher_course:type==='refresher',advanced_training:type==='advanced'},module_ids:toolBased?selected:[]});setDone(d.request)}catch(e){setError(e instanceof Error?e.message:'Unable to submit request.')}setBusy(false)}
  if(loading)return <main className="public-request-shell"><section className="public-request-card"><p>Validating your secure agency portal link…</p></section></main>;
  if(error&&!agency)return <main className="public-request-shell"><section className="public-request-card"><header><div className="library-eyebrow">BACKTRACE</div><h1>Training Request Portal</h1><p>Secure agency submission form</p></header><div className="error">{error}</div></section></main>;

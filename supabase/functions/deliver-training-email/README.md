@@ -1,0 +1,1 @@
+Deploy with verify_jwt=false: this worker authenticates the exact server credential in its handler, supporting modern Supabase secret keys. The scheduler credential is stored only in Supabase Vault. Never place it in client code.

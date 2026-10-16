@@ -1,0 +1,21 @@
+const fs=require('fs'),assert=require('node:assert/strict'),ts=require('typescript');
+let active=true,agency={agency_name:'Philadelphia Police Department',agency_city:'Philadelphia',agency_state:'PA',logo_path:'saved.png'},providerCalls=0,providerStatus=200;
+const db={auth:{getUser:async()=>({data:{user:{id:'test-user'}}})},from:table=>({select(){return this},eq(){return this},async single(){return {data:table==='profiles'?{role:'viewer',active}:agency}}}),storage:{from:()=>({download:async()=>({data:new Blob(['logo'],{type:'image/png'})})})}};
+const moduleObject={exports:{}};
+const code=ts.transpileModule(fs.readFileSync('app/api/business-rules/cover/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+new Function('require','module','exports',code)(name=>name==='@supabase/supabase-js'?{createClient:()=>db}:require(name),moduleObject,moduleObject.exports);
+const {POST}=moduleObject.exports;
+process.env.NEXT_PUBLIC_SUPABASE_URL='https://example.supabase.co';process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY='test';delete process.env.OPENAI_API_KEY;
+const req=(auth=true)=>new Request('https://example.test/api/business-rules/cover',{method:'POST',headers:auth?{Authorization:'Bearer test'}:{},body:JSON.stringify({agency_id:'12345678-1234-1234-1234-123456789012'})});
+global.fetch=async(url,options)=>{providerCalls++;assert.equal(url,'https://api.openai.com/v1/images/edits');assert.equal(options.body.get('model'),'gpt-image-2');assert(options.body.get('image[]') instanceof Blob);assert(options.body.get('prompt').includes('Philadelphia Police Department'));assert(options.body.get('prompt').includes('external white'));assert.equal(options.body.get('n'),'1');return Response.json({data:[{b64_json:Buffer.from('fake-image').toString('base64')}]},{status:providerStatus});};
+(async()=>{
+ assert.equal((await POST(req(false))).status,401);
+ active=false;assert.equal((await POST(req())).status,403);active=true;
+ const saved=agency;agency=null;assert.equal((await POST(req())).status,404);agency={...saved,logo_path:null};assert.equal((await POST(req())).status,422);agency=saved;
+ assert.equal((await POST(req())).status,503);assert.equal(providerCalls,0);
+ process.env.OPENAI_API_KEY='test-only';
+ const response=await POST(req());assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/jpeg');assert.equal(response.headers.get('cache-control'),'private, no-store');
+ await POST(req());assert.equal(providerCalls,2,'Each export must request a fresh image');
+ providerStatus=429;assert.equal((await POST(req())).status,502);providerStatus=200;assert.equal((await POST(req())).status,200,'Failed exports must allow retry');
+ console.log('Cover API checks passed: authorization, agency lookup, logo requirement, missing configuration, fresh generation and retry.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

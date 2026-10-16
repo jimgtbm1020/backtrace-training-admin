@@ -18,3 +18,6 @@ assert(overview.output().includes('Core Features'));
 assert(!compact.output().includes('Core Features'));
 const lengthy=buildAgencyRulesPdf({...overviewAgency,overview_features:overviewAgency.overview_features.repeat(60)},items,assignments);assert(lengthy.getNumberOfPages()>2);
 if(process.env.REGISTRY_QA_PDF_DIR){fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'overview.pdf'),Buffer.from(overview.output('arraybuffer')));fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'overview-long.pdf'),Buffer.from(lengthy.output('arraybuffer')));}
+
+const logoPdf=buildAgencyRulesPdf(agency,items,assignments,'data:image/png;base64,'+Buffer.from(require('fast-png').encode({width:1,height:1,data:new Uint8Array([30,70,120,255]),channels:4})).toString('base64'));
+assert(logoPdf.output().includes('/Subtype /Image'),'Logo must be embedded in the PDF');

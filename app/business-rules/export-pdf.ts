@@ -2,7 +2,7 @@ import {jsPDF} from 'jspdf';
 import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
 import {Agency,Item,Assignment,agencyAddress} from './types';
 
-export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[]){
+export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string){
  const doc=new jsPDF({unit:'pt',format:'letter'});
  const margin=42,width=528,bottom=738;let y=52,toolName='',shade:[number,number,number]=[255,255,255];
  const clean=(value:string)=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,'-');
@@ -38,10 +38,11 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
    y+=height;continued=true;
   }
  }
+ if(logoData){const props=doc.getImageProperties(logoData);const scale=Math.min(64/props.width,64/props.height);doc.addImage(logoData,props.fileType,margin+width-64,42,props.width*scale,props.height*scale);}
  doc.setTextColor(91,107,127);doc.setFontSize(9);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
  doc.setTextColor(26,46,73);doc.setFontSize(22);doc.text('Agency Business Rules',margin,62);
- doc.setFontSize(14);const names=doc.splitTextToSize(clean(agency.agency_name),width);doc.text(names,margin,88);y=88+names.length*17;
- doc.setFontSize(10);const address=doc.splitTextToSize(clean(agencyAddress(agency)),width);doc.text(address,margin,y);y+=address.length*14+18;
+ doc.setFontSize(14);const names=doc.splitTextToSize(clean(agency.agency_name),logoData?width-86:width);doc.text(names,margin,88);y=88+names.length*17;
+ doc.setFontSize(10);const address=doc.splitTextToSize(clean(agencyAddress(agency)),logoData?width-86:width);doc.text(address,margin,y);y+=address.length*14+18;
  doc.setDrawColor(210,220,233);doc.line(margin,y-8,margin+width,y-8);
  if(hasOverview(agency)){
   toolName=agency.overview_heading||defaultOverviewHeading;
@@ -83,7 +84,8 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
  return doc;
 }
 
-export function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[]){
+export async function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logo?:Blob){
+ const logoData=logo?await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result as string);reader.onerror=()=>reject(new Error('Unable to read agency logo.'));reader.readAsDataURL(logo);}):undefined;
  const name=agency.agency_name.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'Agency';
- buildAgencyRulesPdf(agency,items,assignments).save('Agency-Business-Rules-'+name+'.pdf');
+ buildAgencyRulesPdf(agency,items,assignments,logoData).save('Agency-Business-Rules-'+name+'.pdf');
 }

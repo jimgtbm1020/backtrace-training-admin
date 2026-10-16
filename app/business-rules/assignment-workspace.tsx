@@ -7,9 +7,11 @@ type Props={agencyId:string;agencies:Agency[];items:Item[];assignments:Assignmen
 export default function AssignmentWorkspace({agencyId,agencies,items,assignments,canManage,disabled,onAgency,onSave}:Props){
  const [drafts,setDrafts]=useState<Draft[]>([]),[search,setSearch]=useState(''),[view,setView]=useState<'add'|'existing'>(canManage?'add':'existing');
  const agency=agencies.find(a=>a.id===agencyId),saved=assignments.filter(a=>a.agency_id===agencyId);
+ const itemNames=new Map(items.map(item=>[item.id,item.name]));
+ const compareNames=(a:string,b:string)=>a.localeCompare(b,'en',{sensitivity:'base',numeric:true});
  const matches=(item:Item)=>`${item.name} ${item.item_type}`.toLowerCase().includes(search.toLowerCase().trim());
- const available=items.filter(i=>!saved.some(a=>a.item_id===i.id)&&matches(i));
- const visibleSaved=saved.filter(a=>{const i=items.find(i=>i.id===a.item_id);return i&&matches(i);});
+ const available=items.filter(i=>!saved.some(a=>a.item_id===i.id)&&matches(i)).sort((a,b)=>compareNames(a.name,b.name));
+ const visibleSaved=saved.filter(a=>{const i=items.find(i=>i.id===a.item_id);return i&&matches(i);}).sort((a,b)=>compareNames(itemNames.get(a.item_id)||'',itemNames.get(b.item_id)||''));
  function select(item_id:string,existing?:Assignment){setDrafts(rows=>rows.some(r=>r.item_id===item_id)?rows:[...rows,{item_id,data_source:existing?.data_source||'',retention_value:String(existing?.retention_value||90),retention_unit:existing?.retention_unit||'Days',expected_updated_at:existing?.updated_at||null}]);}
  function update(id:string,patch:Partial<Draft>){setDrafts(rows=>rows.map(r=>r.item_id===id?{...r,...patch}:r));}
  async function submit(e:FormEvent){e.preventDefault();if(await onSave(drafts))setDrafts([]);}

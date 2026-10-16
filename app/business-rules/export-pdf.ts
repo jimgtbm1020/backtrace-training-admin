@@ -2,7 +2,7 @@ import {jsPDF} from 'jspdf';
 import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
 import {Agency,Item,Assignment,agencyAddress} from './types';
 
-export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string){
+export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string,coverData?:string){
  const doc=new jsPDF({unit:'pt',format:'letter'});
  const margin=42,width=528,bottom=738;let y=52,toolName='',shade:[number,number,number]=[255,255,255];
  const clean=(value:string)=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,'-');
@@ -37,6 +37,16 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
    doc.setFont('helvetica','normal');doc.setFontSize(10);if(retentionChunk.length)doc.text(retentionChunk,margin+382,y+31,{lineHeightFactor:1.5});
    y+=height;continued=true;
   }
+ }
+ if(coverData){
+  const image=doc.getImageProperties(coverData),scale=Math.max(612/image.width,792/image.height),w=image.width*scale,h=image.height*scale;
+  doc.addImage(coverData,image.fileType,(612-w)/2,(792-h)/2,w,h);
+  if(logoData){const logo=doc.getImageProperties(logoData),s=Math.min(130/logo.width,130/logo.height);doc.addImage(logoData,logo.fileType,(612-logo.width*s)/2,52,logo.width*s,logo.height*s);}
+  doc.setFillColor(10,28,49);doc.rect(30,575,552,187,'F');doc.setDrawColor(199,163,75);doc.setLineWidth(2);doc.line(54,594,558,594);
+  doc.setFont('helvetica','bold');doc.setFontSize(25);doc.setTextColor(255,255,255);doc.text('Agency Business Rules',54,629);
+  doc.setFontSize(16);const agencyLines=doc.splitTextToSize(clean(agency.agency_name),504);doc.text(agencyLines,54,660);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(218,227,239);doc.text('BACKTRACE TRAINING ADMINISTRATION',54,721);doc.text('Date printed: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'}),54,741);
+  doc.addPage();
  }
  if(logoData){const props=doc.getImageProperties(logoData);const scale=Math.min(64/props.width,64/props.height);doc.addImage(logoData,props.fileType,margin+width-64,42,props.width*scale,props.height*scale);}
  doc.setTextColor(91,107,127);doc.setFontSize(9);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
@@ -80,12 +90,13 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   metadata(assignment.data_source,retention);paragraph('Description',item.description);paragraph('Expected outcome',item.expected_outcome);y+=14;
  });
  if(!matches.length)paragraph('Assigned tools','No items assigned to this agency.');
- const count=doc.getNumberOfPages();for(let p=1;p<=count;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(91,107,127);const footer=doc.splitTextToSize(clean(agency.agency_name),400)[0];doc.text(footer,margin,768);doc.text('Page '+p+' of '+count,570,768,{align:'right'});}
+ const count=doc.getNumberOfPages();for(let p=coverData?2:1;p<=count;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(91,107,127);const footer=doc.splitTextToSize(clean(agency.agency_name),400)[0];doc.text(footer,margin,768);doc.text('Page '+(p-(coverData?1:0))+' of '+(count-(coverData?1:0)),570,768,{align:'right'});}
  return doc;
 }
 
-export async function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logo?:Blob){
+export async function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logo?:Blob,cover?:Blob){
  const logoData=logo?await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result as string);reader.onerror=()=>reject(new Error('Unable to read agency logo.'));reader.readAsDataURL(logo);}):undefined;
+ const coverData=cover?await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result as string);reader.onerror=()=>reject(new Error('Unable to read report cover.'));reader.readAsDataURL(cover);}):undefined;
  const name=agency.agency_name.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'Agency';
- buildAgencyRulesPdf(agency,items,assignments,logoData).save('Agency-Business-Rules-'+name+'.pdf');
+ buildAgencyRulesPdf(agency,items,assignments,logoData,coverData).save('Agency-Business-Rules-'+name+'.pdf');
 }

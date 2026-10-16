@@ -65,9 +65,9 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   y+=10;
  }
  const matches=assignments.filter(a=>a.agency_id===agency.id).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
- matches.forEach((assignment,index)=>{
+ matches.forEach((assignment)=>{
   const item=items.find(i=>i.id===assignment.item_id);if(!item)throw new Error('An assigned item is unavailable. Refresh before exporting.');
-  toolName=item.name;shade=index%2?[245,248,252]:[255,255,255];
+  toolName=item.name;shade=[255,255,255];
   doc.setFont('helvetica','bold');doc.setFontSize(12);const title=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
   const retention=assignment.retention_value+' '+assignment.retention_unit.toLowerCase();
   const metaHeight=32+Math.max(sourceLines(assignment.data_source).length,wrap(retention,118).length)*15;

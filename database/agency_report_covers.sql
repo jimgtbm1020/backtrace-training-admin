@@ -1,0 +1,5 @@
+alter table public.business_rules_agencies add column cover_path text check(cover_path is null or (length(cover_path)<=200 and cover_path ~ '^[0-9a-f-]+/[0-9a-f-]+\.(png|jpg)$')), add column cover_style text check(cover_style is null or cover_style='philadelphia-1776');
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('agency-covers','agency-covers',false,8388608,array['image/png','image/jpeg']);
+create policy agency_covers_read on storage.objects for select to authenticated using(bucket_id='agency-covers' and public.current_user_role() in ('admin','coordinator','trainer','viewer'));
+create policy agency_covers_insert on storage.objects for insert to authenticated with check(bucket_id='agency-covers' and public.current_user_role() in ('admin','coordinator') and (storage.foldername(name))[1]=auth.uid()::text);
+create policy agency_covers_delete on storage.objects for delete to authenticated using(bucket_id='agency-covers' and public.current_user_role() in ('admin','coordinator') and (storage.foldername(name))[1]=auth.uid()::text);

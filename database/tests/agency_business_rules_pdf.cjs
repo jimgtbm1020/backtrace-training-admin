@@ -21,3 +21,7 @@ if(process.env.REGISTRY_QA_PDF_DIR){fs.writeFileSync(path.join(process.env.REGIS
 
 const logoPdf=buildAgencyRulesPdf(agency,items,assignments,'data:image/png;base64,'+Buffer.from(require('fast-png').encode({width:1,height:1,data:new Uint8Array([30,70,120,255]),channels:4})).toString('base64'));
 assert(logoPdf.output().includes('/Subtype /Image'),'Logo must be embedded in the PDF');
+
+const cinematic=buildAgencyRulesPdf(agency,items,assignments,undefined,'data:image/png;base64,'+fs.readFileSync('public/report-covers/philadelphia-1776.png').toString('base64'));
+assert.equal(cinematic.getNumberOfPages(),compact.getNumberOfPages()+1);assert(cinematic.output().includes('Date printed:'));assert(cinematic.output().includes('Page 1 of 1'));
+if(process.env.REGISTRY_QA_PDF_DIR)fs.writeFileSync(path.join(process.env.REGISTRY_QA_PDF_DIR,'cover.pdf'),Buffer.from(cinematic.output('arraybuffer')));

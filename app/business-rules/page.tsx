@@ -26,6 +26,10 @@ export default function AgencyBusinessRulesPage(){
  const [agencies,setAgencies]=useState<Agency[]>([]),[items,setItems]=useState<Item[]>([]),[assignments,setAssignments]=useState<Assignment[]>([]);
  const [tab,setTab]=useState<Tab>('agencies'),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  const [exportError,setExportError]=useState('');
+ const [exportStage,setExportStage]=useState<'cover'|'pdf'|null>(null);
+ const [exportSeconds,setExportSeconds]=useState(0);
+ const exportActive=exportStage!==null;
+ useEffect(()=>{if(!exportActive)return;const started=Date.now();setExportSeconds(0);const timer=setInterval(()=>setExportSeconds(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer);},[exportActive]);
  const [agencyForm,setAgencyForm]=useState(blankAgency),[editingAgency,setEditingAgency]=useState<Agency|null>(null);
  const [logoFile,setLogoFile]=useState<File|null>(null),[removeLogo,setRemoveLogo]=useState(false),[logoPreview,setLogoPreview]=useState('');
  useEffect(()=>{if(!logoFile){setLogoPreview('');return;}const url=URL.createObjectURL(logoFile);setLogoPreview(url);return()=>URL.revokeObjectURL(url);},[logoFile]);
@@ -119,24 +123,29 @@ export default function AgencyBusinessRulesPage(){
  }
  async function exportPdf(){
   if(!reportAgency||loading||busy||error)return;
-  setBusy(true);setMessage('Creating your agency’s cinematic cover… This may take a few minutes.');setExportError('');
+  setBusy(true);setExportStage('cover');setMessage('');setExportError('');
   try{
    const {data:session}=await supabase.auth.getSession();
    if(!session.session)throw new Error('Please sign in again before exporting.');
    const response=await fetch('/api/business-rules/cover',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.session.access_token},body:JSON.stringify({agency_id:reportAgency.id}),signal:AbortSignal.timeout(285000)});
    if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.message||'Unable to create the cover. Please try again.');}
-   const cover=await response.blob();setMessage('Cover created. Building your PDF…');
+   const cover=await response.blob();setExportStage('pdf');
    const {data:logo,error:logoError}=await supabase.storage.from('agency-logos').download(reportAgency.logo_path!);
    if(logoError)throw new Error('Unable to load agency logo. Please try exporting again.');
    const {downloadAgencyRulesPdf}=await import('./export-pdf');
    await downloadAgencyRulesPdf(reportAgency,items,assignments,logo||undefined,cover);
    setMessage('PDF exported for '+reportAgency.agency_name+'.');
-  }catch(e){setMessage('');setExportError(e instanceof Error?e.message:'Unable to export PDF. Please try again.');}finally{setBusy(false);}
+  }catch(e){setMessage('');setExportError(e instanceof Error?e.message:'Unable to export PDF. Please try again.');}finally{setBusy(false);setExportStage(null);}
  }
  if(access!=='allowed')return <main className="shell"><section className="card"><h1>Agency Business Rules</h1><p>{access==='checking'?'Checking Backtrace access…':error||'Sign in through Training Administration.'}</p>{access==='denied'&&<a href="/">Return to sign in</a>}</section></main>;
  const disabled=busy||loading;
  return <main className={'shell '+styles.page}>
   <header className={styles.header}><div><span className="library-eyebrow">BUSINESS RULES</span><h1>Agency Business Rules</h1></div><a className="dashboard-return-button" href="/">Back to dashboard</a></header>
+  {exportActive&&<aside className={styles.exportProgress} role="status" aria-live="polite" aria-atomic="true">
+   <span className={styles.exportSpinner} aria-hidden="true"/>
+   <div><strong>Generating your report</strong><p>{reportAgency?.agency_name}</p><p>{exportStage==='cover'?'Step 1 of 2 — Creating your cinematic agency cover…':'Step 2 of 2 — Preparing your PDF for download…'}</p><small>This may take a few minutes. Please keep this page open.</small></div>
+   <span className={styles.exportElapsed} aria-hidden="true">{Math.floor(exportSeconds/60)}:{String(exportSeconds%60).padStart(2,'0')} elapsed</span>
+  </aside>}
   <nav className={styles.tabs} role="tablist" aria-label="Agency business rules">{tabs.map(([id,label])=><button type="button" key={id} role="tab" id={'rules-tab-'+id} aria-controls={'rules-panel-'+id} aria-selected={tab===id} onClick={()=>{setTab(id);setMessage('');}}>{label}</button>)}</nav>
   {!canManage&&<p className={styles.description}>Read-only access. Administrators and Coordinators maintain these records.</p>}
   {error&&<div className={styles.error} role="alert">{error} <button type="button" disabled={disabled} onClick={()=>void load()}>Refresh records</button></div>}
@@ -172,7 +181,7 @@ export default function AgencyBusinessRulesPage(){
   </section>
   <section id="rules-panel-report" role="tabpanel" aria-labelledby="rules-tab-report" hidden={tab!=='report'}>
    <p className={styles.description}>{descriptions.report}</p>
-   <div className={styles.toolbar}><label>Report for agency<select value={reportAgencyId} disabled={disabled} onChange={e=>setReportAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option value={a.id} key={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label><button className={styles.primary} disabled={disabled||!reportAgency||!!error} onClick={()=>void exportPdf()}>{busy?'Exporting…':'Export PDF'}</button></div>
+   <div className={styles.toolbar}><label>Report for agency<select value={reportAgencyId} disabled={disabled} onChange={e=>setReportAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option value={a.id} key={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label><button className={styles.primary} disabled={disabled||!reportAgency||!!error} onClick={()=>void exportPdf()}>{exportActive?'Generating report…':'Export PDF'}</button></div>
    {exportError&&<p role="alert">{exportError}</p>}
    {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header>{reportAgency.logo_url&&<img className={styles.reportLogo} src={reportAgency.logo_url} alt={reportAgency.agency_name+' logo'}/>}<h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><p>A fresh cinematic cover is created from this agency’s name and saved logo each time you export. The PDF includes the date printed.</p><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}{reportAssignments.map(a=>{const item=items.find(i=>i.id===a.item_id);return <article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h3>{item?.name||'Unavailable item'}</h3><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source}</dd></div><div><dt>Retention</dt><dd>{a.retention_value} {a.retention_unit.toLowerCase()}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>;})}{!reportAssignments.length&&<p>No items assigned to this agency.</p>}</div>}
   </section>

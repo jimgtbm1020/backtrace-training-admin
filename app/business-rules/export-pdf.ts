@@ -41,7 +41,6 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
  if(coverData){
   const image=doc.getImageProperties(coverData),scale=Math.max(612/image.width,792/image.height),w=image.width*scale,h=image.height*scale;
   doc.addImage(coverData,image.fileType,(612-w)/2,(792-h)/2,w,h);
-  if(logoData){const logo=doc.getImageProperties(logoData),s=Math.min(130/logo.width,130/logo.height);doc.addImage(logoData,logo.fileType,(612-logo.width*s)/2,52,logo.width*s,logo.height*s);}
   doc.setFillColor(10,28,49);doc.rect(30,575,552,187,'F');doc.setDrawColor(199,163,75);doc.setLineWidth(2);doc.line(54,594,558,594);
   doc.setFont('helvetica','bold');doc.setFontSize(25);doc.setTextColor(255,255,255);doc.text('Agency Business Rules',54,629);
   doc.setFontSize(16);const agencyLines=doc.splitTextToSize(clean(agency.agency_name),504);doc.text(agencyLines,54,660);

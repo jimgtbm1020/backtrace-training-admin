@@ -43,6 +43,9 @@ jobs:
         run: node database/tests/agency_business_rules_pdf.cjs
 
 
+      - name: Check agency cover API
+        run: node database/tests/agency_cover_api.cjs
+
       - name: Check agency import CSV
         run: node database/tests/agency_import_csv.cjs
 

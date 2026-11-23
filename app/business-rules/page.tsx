@@ -13,6 +13,7 @@ const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency I
 type Tab=typeof tabs[number][0];
 const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency once, select multiple tools, and save their individual data sources and retention periods together. Use Assigned to review or edit existing rules.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
 const blankAgency={agency_name:'',overview_heading:'Core Features (Quick Overview)',overview_introduction:'',overview_features:''};
+const itemTypes=['Tool','Dashboard','Smart Tool','Misc.'];
 const blankItem={name:'',item_type:'Tool',description:'',expected_outcome:''};
 
 async function allRows<T>(fetchPage:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>){
@@ -38,6 +39,8 @@ export default function AgencyBusinessRulesPage(){
  const importInput=useRef<HTMLInputElement>(null);const [importRows,setImportRows]=useState<ImportRow[]>([]);const [importFile,setImportFile]=useState('');
  const importPreview=previewAgencies(importRows,agencies);
  const canManage=role==='admin'||role==='coordinator';
+ const catalogTypes=[...itemTypes,...Array.from(new Set(items.map(item=>item.item_type))).filter(type=>!itemTypes.includes(type)).sort()];
+ const catalogGroups=catalogTypes.map(type=>({type,items:items.filter(item=>item.item_type===type).sort((a,b)=>a.name.localeCompare(b.name))}));
  const reportAgency=agencies.find(a=>a.id===reportAgencyId);
  const reportAssignments=assignments.filter(a=>a.agency_id===reportAgencyId).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
 
@@ -164,15 +167,15 @@ export default function AgencyBusinessRulesPage(){
   <section id="rules-panel-items" role="tabpanel" aria-labelledby="rules-tab-items" hidden={tab!=='items'}>
    <p className={styles.description}>{descriptions.items}</p>
    {canManage&&<form className={styles.panel} onSubmit={saveItem}><h2>{editingItem?'Edit item':'Create item'}</h2><fieldset className={styles.fields} disabled={disabled}>
-    <label>Item type<select value={itemForm.item_type} onChange={e=>setItemForm({...itemForm,item_type:e.target.value})}>{['Tool','Dashboard','Smart Tool','Misc.'].map(t=><option key={t}>{t}</option>)}</select></label>
-    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{setEditingItem(null);setItemForm(blankItem);setMessage('');}}}><option value="">Create new item</option>{items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+    <label>Item type<select value={itemForm.item_type} onChange={e=>setItemForm({...itemForm,item_type:e.target.value})}>{itemTypes.map(t=><option key={t}>{t}</option>)}</select></label>
+    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{setEditingItem(null);setItemForm(blankItem);setMessage('');}}}><option value="">Create new item</option>{catalogGroups.filter(group=>group.items.length>0).map(group=><optgroup key={group.type} label={group.type}>{group.items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</optgroup>)}</select></label>
     <label className={styles.full}>{editingItem?'Update item name':'New item name'}<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
     <p className={styles.full}>Choose an existing item to update its saved details, or choose Create new item and enter a unique name.</p>
     <label className={styles.full}>Description<textarea required maxLength={4000} rows={3} value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})}/></label>
     <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={3} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
     <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{setEditingItem(null);setItemForm(blankItem);setError('');setMessage('');}}>New item</button></div>
    </fieldset></form>}
-   <div className={styles.panel}><h2>Saved items</h2>{items.map(row=><div className={styles.row} key={row.id}><div><span className={styles.badge}>{row.item_type}</span><h3>{row.name}</h3><p>{row.description}</p>{row.expected_outcome&&<p><strong>Expected outcome:</strong> {row.expected_outcome}</p>}</div>{canManage&&<button disabled={disabled} onClick={()=>editItem(row)}>Edit</button>}</div>)}{!loading&&!items.length&&<p>No items saved yet.</p>}</div>
+   <div className={styles.panel}><h2>Saved items</h2>{catalogGroups.map((group,index)=><section key={group.type} aria-labelledby={'catalog-type-'+index} style={{marginTop:24}}><h3 id={'catalog-type-'+index} style={{paddingBottom:12,borderBottom:'2px solid #d9e1eb',color:'#153b70'}}>{group.type} <span className={styles.badge}>{group.items.length}</span></h3>{group.items.map(row=><div className={styles.row} key={row.id}><div><h4 style={{margin:'8px 0',fontSize:18}}>{row.name}</h4><p>{row.description}</p>{row.expected_outcome&&<p><strong>Expected outcome:</strong> {row.expected_outcome}</p>}</div>{canManage&&<button disabled={disabled} onClick={()=>editItem(row)}>Edit</button>}</div>)}{!loading&&!group.items.length&&<p>No items saved in this category.</p>}</section>)}{!loading&&!items.length&&<p>No items saved yet.</p>}</div>
   </section>
   <section id="rules-panel-assign" role="tabpanel" aria-labelledby="rules-tab-assign" hidden={tab!=='assign'}>
    <p className={styles.description}>{descriptions.assign}</p>

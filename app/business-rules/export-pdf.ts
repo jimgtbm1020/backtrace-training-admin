@@ -1,14 +1,32 @@
 import {jsPDF} from 'jspdf';
 import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
 import {Agency,Item,Assignment,agencyAddress} from './types';
+import {groupAgencyAssignments,itemTypeColor} from './item-groups';
 
 export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string,coverData?:string){
+ const groups=groupAgencyAssignments(agency.id,items,assignments);
+ if(groups.some(group=>group.rows.some(row=>!row.item)))throw new Error('An assigned item is unavailable. Refresh before exporting.');
  const doc=new jsPDF({unit:'pt',format:'letter'});
  const margin=42,width=528,bottom=738;let y=52,toolName='',shade:[number,number,number]=[255,255,255];
+ let activeGroup:{type:string;count:number}|null=null;
  const clean=(value:string)=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,'-');
  const wrap=(value:string,w=width-28):string[]=>{doc.setFont('helvetica','normal');doc.setFontSize(10);return doc.splitTextToSize(clean(value||'Not specified'),w);};
+ function groupHeading(type:string,continued=false){
+  doc.setFont('helvetica','bold');doc.setFontSize(16);
+  const lines:string[]=doc.splitTextToSize(clean(type+(continued?' (continued)':'')),width-128);
+  return {lines,height:Math.max(42,lines.length*19+20)};
+ }
+ function drawGroupHeading(continued=false){
+  if(!activeGroup)return;
+  const {lines,height}=groupHeading(activeGroup.type,continued);
+  doc.setFillColor(...itemTypeColor(activeGroup.type));doc.roundedRect(margin,y,width,height,6,6,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(255,255,255);doc.text(lines,margin+14,y+26,{lineHeightFactor:19/16});
+  doc.setFontSize(10);doc.text(activeGroup.count+' '+(activeGroup.count===1?'item':'items'),margin+width-14,y+26,{align:'right'});
+  y+=height+10;
+ }
  function nextPage(continued=false){
   doc.addPage();doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text('BACKTRACE | Agency Business Rules',margin,30);y=52;
+  drawGroupHeading(true);
   if(continued){doc.setFontSize(10);doc.setTextColor(26,46,73);const name=doc.splitTextToSize(clean(toolName+' (continued)'),width);doc.text(name,margin,y);y+=name.length*14+10;}
  }
  function fill(height:number){doc.setFillColor(...shade);doc.rect(margin,y,width,height,'F');}
@@ -74,21 +92,36 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   }
   y+=10;
  }
- const matches=assignments.filter(a=>a.agency_id===agency.id).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
- matches.forEach((assignment)=>{
-  const item=items.find(i=>i.id===assignment.item_id);if(!item)throw new Error('An assigned item is unavailable. Refresh before exporting.');
-  toolName=item.name;shade=[255,255,255];
-  doc.setFont('helvetica','bold');doc.setFontSize(12);const title=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
+ function itemLayout(item:Item,assignment:Assignment){
+  doc.setFont('helvetica','bold');doc.setFontSize(12);
+  const title:string[]=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
   const retention=assignment.retention_value+' '+assignment.retention_unit.toLowerCase();
   const metaHeight=32+Math.max(sourceLines(assignment.data_source).length,wrap(retention,118).length)*15;
   const height=headerHeight+metaHeight+52+(wrap(item.description).length+wrap(item.expected_outcome).length)*14;
-  if(y+height>bottom&&height<=bottom-52)nextPage();
-  if(y+headerHeight+42>bottom)nextPage();
-  fill(headerHeight);doc.setTextColor(26,46,73);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(title,margin+14,y+19);
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text(item.item_type,margin+width-14,y+19,{align:'right'});y+=headerHeight;
-  metadata(assignment.data_source,retention);paragraph('Description',item.description);paragraph('Expected outcome',item.expected_outcome);y+=14;
- });
- if(!matches.length)paragraph('Assigned tools','No items assigned to this agency.');
+  return {title,headerHeight,retention,height};
+ }
+ for(const group of groups){
+  activeGroup=null;
+  const headingHeight=groupHeading(group.type).height+10;
+  const continuedHeadingHeight=groupHeading(group.type,true).height+10;
+  const first=group.rows[0],firstLayout=itemLayout(first.item!,first.assignment);
+  const firstSpace=firstLayout.height<=bottom-52-headingHeight?firstLayout.height:firstLayout.headerHeight+80;
+  // Keep each section heading with its first item, even after a long overview.
+  if(y+headingHeight+firstSpace>bottom)nextPage();
+  activeGroup={type:group.type,count:group.rows.length};drawGroupHeading();
+  group.rows.forEach(({assignment,item},index)=>{
+   if(!item)return; // Missing assigned items were rejected before creating the PDF.
+   toolName=item.name;shade=[255,255,255];
+   const {title,headerHeight,retention,height}=itemLayout(item,assignment);
+   if(index>0&&y+height>bottom&&height<=bottom-52-continuedHeadingHeight)nextPage();
+   if(y+headerHeight+42>bottom)nextPage();
+   fill(headerHeight);doc.setTextColor(26,46,73);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(title,margin+14,y+19);
+   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text(item.item_type,margin+width-14,y+19,{align:'right'});y+=headerHeight;
+   metadata(assignment.data_source,retention);paragraph('Description',item.description);paragraph('Expected outcome',item.expected_outcome);y+=14;
+  });
+  activeGroup=null;y+=10;
+ }
+ if(!groups.length)paragraph('Assigned tools','No items assigned to this agency.');
  const count=doc.getNumberOfPages();for(let p=coverData?2:1;p<=count;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(91,107,127);const footer=doc.splitTextToSize(clean(agency.agency_name),400)[0];doc.text(footer,margin,768);doc.text('Page '+(p-(coverData?1:0))+' of '+(count-(coverData?1:0)),570,768,{align:'right'});}
  return doc;
 }
@@ -99,3 +132,4 @@ export async function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignme
  const name=agency.agency_name.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'Agency';
  buildAgencyRulesPdf(agency,items,assignments,logoData,coverData).save('Agency-Business-Rules-'+name+'.pdf');
 }
+

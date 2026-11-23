@@ -191,7 +191,20 @@ export default function AgencyBusinessRulesPage(){
     <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={3} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
     <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{setEditingItem(null);setItemForm(blankItem);setError('');setMessage('');}}>New item</button></div>
    </fieldset></form>}
-   <div className={styles.panel}><h2>Saved items</h2>{catalogGroups.map((group,index)=><section key={group.type} className={styles.catalogSection} data-item-type={group.type} aria-labelledby={'catalog-type-'+index}><header className={styles.catalogHeader}><h3 id={'catalog-type-'+index}>{group.type}</h3><span className={styles.catalogCount}>{group.items.length} {group.items.length===1?'item':'items'}</span></header><div className={styles.catalogBody}>{group.items.map(row=><div className={styles.row} key={row.id}><div><h4 className={styles.catalogItemName}>{row.name}</h4><p>{row.description}</p>{row.expected_outcome&&<p><strong>Expected outcome:</strong> {row.expected_outcome}</p>}</div>{canManage&&<button disabled={disabled} onClick={()=>editItem(row)}>Edit</button>}</div>)}{!loading&&!group.items.length&&<p className={styles.catalogEmpty}>No items saved in this category.</p>}</div></section>)}{!loading&&!items.length&&<p>No items saved yet.</p>}</div>
+   <div className={styles.panel+' '+styles.savedItems}>
+    <div className={styles.savedItemsHeading}><h2>Saved items</h2><span className={styles.badge}>{items.length} {items.length===1?'item':'items'} total</span></div>
+    {catalogGroups.map((group,index)=><section key={group.type} className={styles.catalogSection} data-item-type={group.type} aria-labelledby={'catalog-type-'+index}>
+     <header className={styles.catalogHeader}><h3 id={'catalog-type-'+index}>{group.type}</h3><span className={styles.catalogCount}>{group.items.length} {group.items.length===1?'item':'items'}</span></header>
+     <div className={styles.catalogBody}>{group.items.map(row=><article className={styles.savedItemCard} key={row.id} aria-labelledby={'saved-item-'+row.id}>
+      <header className={styles.savedItemHeader}><h4 id={'saved-item-'+row.id} className={styles.catalogItemName}>{row.name}</h4>{canManage&&<button type="button" className={styles.savedItemEdit} aria-label={'Edit '+row.name} disabled={disabled} onClick={()=>editItem(row)}>Edit item</button>}</header>
+      <dl className={styles.savedItemDetails}>
+       <div><dt>Description</dt><dd>{row.description}</dd></div>
+       <div><dt>Expected outcome</dt><dd>{row.expected_outcome||'Not specified'}</dd></div>
+      </dl>
+     </article>)}{!loading&&!group.items.length&&<p className={styles.catalogEmpty}>No items saved in this category.</p>}</div>
+    </section>)}
+    {!loading&&!items.length&&<p>No items saved yet.</p>}
+   </div>
   </section>
   <section id="rules-panel-assign" role="tabpanel" aria-labelledby="rules-tab-assign" hidden={tab!=='assign'}>
    <p className={styles.description}>{descriptions.assign}</p>

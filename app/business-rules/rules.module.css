@@ -52,3 +52,8 @@
 .bulkTools{margin-top:18px;padding:14px;background:#edf3fa;border:1px solid #cbd9e9;border-radius:9px}.page .bulkTools>button{width:100%;min-height:44px;height:auto;white-space:normal;line-height:1.4;font-weight:700;padding:11px 12px}.bulkTools p{margin:10px 0 0;font-size:12px;line-height:1.55;color:var(--rules-muted)}.bulkNotice{padding:12px;border-left:3px solid #254d7e;background:#edf3fa;color:var(--rules-ink);font-size:13px;line-height:1.5}.page .bulkTools>button:focus-visible{outline:3px solid #82b2eb;outline-offset:3px}
 
 .page .unassignButton{color:#942c2c;border-color:#d6a8a8}.page .unassignButton:hover:not(:disabled){background:#fff1f1;border-color:#942c2c}.page .unassignButton:focus-visible{outline:3px solid #254d7e;outline-offset:2px}
+
+.toolOption>span,.savedTool>div:first-child{min-width:0;flex:1}
+.savedTool>button{align-self:flex-start;flex-shrink:0}
+.page .toolDescription{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:100%;margin-top:6px;font-size:12px;font-weight:400;line-height:1.45;color:var(--rules-muted);white-space:normal;overflow-wrap:anywhere}
+.assignmentTable .toolDescription{max-width:32ch}

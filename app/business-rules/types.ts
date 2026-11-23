@@ -1,5 +1,6 @@
 export type Agency={cover_path?:string|null;cover_style?:string|null;cover_url?:string;logo_path?:string|null;logo_url?:string;overview_heading?:string;overview_introduction?:string;overview_features?:string;id:string;agency_name:string;agency_address:string|null;city_state_zip:string|null;agency_city:string|null;agency_state:string|null;agency_zip:string|null;active:boolean;updated_at:string};
 export type Item={id:string;name:string;item_type:string;description:string;expected_outcome:string;updated_at:string};
-export type Assignment={id:string;agency_id:string;item_id:string;data_source:string;retention_value:number;retention_unit:string;updated_at:string};
+export type Assignment={id:string;agency_id:string;item_id:string;data_source:string|null;retention_value:number|null;retention_unit:string|null;updated_at:string};
 export const agencyLocation=(agency:Agency)=>[agency.agency_city,agency.agency_state,agency.agency_zip].filter(Boolean).join(', ')||agency.city_state_zip||'';
 export const agencyAddress=(agency:Agency)=>[agency.agency_address,agencyLocation(agency)].filter(Boolean).join(', ');
+export const formatRetention=(assignment:Pick<Assignment,'retention_value'|'retention_unit'>)=>[assignment.retention_value,assignment.retention_unit?.toLowerCase()].filter(value=>value!==null&&value!==undefined&&value!=='').join(' ')||'Not specified';

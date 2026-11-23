@@ -1,6 +1,6 @@
 import {jsPDF} from 'jspdf';
 import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
-import {Agency,Item,Assignment,agencyAddress} from './types';
+import {Agency,Item,Assignment,agencyAddress,formatRetention} from './types';
 import {groupAgencyAssignments,itemTypeColor} from './item-groups';
 
 export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string,coverData?:string){
@@ -40,8 +40,8 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(26,46,73);doc.text(chunk,margin+14,y+28);y+=height;continued=true;
   }
  }
- function sourceLines(source:string):string[]{doc.setFont('helvetica','bold');doc.setFontSize(11);return doc.splitTextToSize(clean(source||'Not specified'),340);}
- function metadata(source:string,retention:string){
+ function sourceLines(source:string|null):string[]{doc.setFont('helvetica','bold');doc.setFontSize(11);return doc.splitTextToSize(clean(source||'Not specified'),340);}
+ function metadata(source:string|null,retention:string){
   const left=sourceLines(source),right=wrap(retention,118);let continued=false;
   while(left.length||right.length){
    let capacity=Math.floor((bottom-y-32)/15);
@@ -95,7 +95,7 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
  function itemLayout(item:Item,assignment:Assignment){
   doc.setFont('helvetica','bold');doc.setFontSize(12);
   const title:string[]=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
-  const retention=assignment.retention_value+' '+assignment.retention_unit.toLowerCase();
+  const retention=formatRetention(assignment);
   const metaHeight=32+Math.max(sourceLines(assignment.data_source).length,wrap(retention,118).length)*15;
   const height=headerHeight+metaHeight+52+(wrap(item.description).length+wrap(item.expected_outcome).length)*14;
   return {title,headerHeight,retention,height};

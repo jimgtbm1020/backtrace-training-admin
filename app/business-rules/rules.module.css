@@ -48,3 +48,5 @@
 
 
 .reportGroup .reportItem{padding:22px;border-bottom:1px solid var(--rules-line)}.reportGroup .reportItem:last-child{border-bottom:0}@media(max-width:600px){.reportGroup .reportItem{padding:16px 14px}}
+
+.bulkTools{margin-top:18px;padding:14px;background:#edf3fa;border:1px solid #cbd9e9;border-radius:9px}.page .bulkTools>button{width:100%;min-height:44px;height:auto;white-space:normal;line-height:1.4;font-weight:700;padding:11px 12px}.bulkTools p{margin:10px 0 0;font-size:12px;line-height:1.55;color:var(--rules-muted)}.bulkNotice{padding:12px;border-left:3px solid #254d7e;background:#edf3fa;color:var(--rules-ink);font-size:13px;line-height:1.5}.page .bulkTools>button:focus-visible{outline:3px solid #82b2eb;outline-offset:3px}

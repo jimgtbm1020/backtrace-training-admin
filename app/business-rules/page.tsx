@@ -3,6 +3,7 @@
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 import {Agency,Item,Assignment,agencyLocation} from './types';
+import {itemTypes,groupAgencyAssignments} from './item-groups';
 import styles from './rules.module.css';
 import AgencyOverview,{OverviewEditor} from './agency-overview';
 import AssignmentWorkspace from './assignment-workspace';
@@ -13,7 +14,6 @@ const tabs=[['agencies','Agencies'],['items','Item catalog'],['assign','Agency I
 type Tab=typeof tabs[number][0];
 const descriptions:Record<Tab,string>={agencies:'Create or import agencies for internal business rules. Save each agency once to assign multiple tools. This registry is separate from training requests and the training Agency Directory.',items:'Create or update a tool, dashboard, smart tool, or miscellaneous item, including its description and expected outcome.',assign:'Choose an agency once, select multiple tools, and save their individual data sources and retention periods together. Use Assigned to review or edit existing rules.',report:'Review an agency’s assigned tools, data sources, retention periods, and expected outcomes, then export its business rules to PDF.'};
 const blankAgency={agency_name:'',overview_heading:'Core Features (Quick Overview)',overview_introduction:'',overview_features:''};
-const itemTypes=['Tool','Dashboard','Smart Tool','Misc.'];
 const blankItem={name:'',item_type:'Tool',description:'',expected_outcome:''};
 
 async function allRows<T>(fetchPage:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>){
@@ -42,7 +42,7 @@ export default function AgencyBusinessRulesPage(){
  const catalogTypes=[...itemTypes,...Array.from(new Set(items.map(item=>item.item_type))).filter(type=>!itemTypes.includes(type)).sort()];
  const catalogGroups=catalogTypes.map(type=>({type,items:items.filter(item=>item.item_type===type).sort((a,b)=>a.name.localeCompare(b.name))}));
  const reportAgency=agencies.find(a=>a.id===reportAgencyId);
- const reportAssignments=assignments.filter(a=>a.agency_id===reportAgencyId).sort((a,b)=>(items.find(i=>i.id===a.item_id)?.name||'').localeCompare(items.find(i=>i.id===b.item_id)?.name||''));
+ const reportGroups=groupAgencyAssignments(reportAgencyId,items,assignments);
 
  async function load(){
   setLoading(true);setError('');
@@ -186,7 +186,8 @@ export default function AgencyBusinessRulesPage(){
    <p className={styles.description}>{descriptions.report}</p>
    <div className={styles.toolbar}><label>Report for agency<select value={reportAgencyId} disabled={disabled} onChange={e=>setReportAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option value={a.id} key={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label><button className={styles.primary} disabled={disabled||!reportAgency||!!error} onClick={()=>void exportPdf()}>{exportActive?'Generating report…':'Export PDF'}</button></div>
    {exportError&&<p role="alert">{exportError}</p>}
-   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header>{reportAgency.logo_url&&<img className={styles.reportLogo} src={reportAgency.logo_url} alt={reportAgency.agency_name+' logo'}/>}<h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><p>A fresh cinematic cover is created from this agency’s name and saved logo each time you export. The PDF includes the date printed.</p><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}{reportAssignments.map(a=>{const item=items.find(i=>i.id===a.item_id);return <article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h3>{item?.name||'Unavailable item'}</h3><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source}</dd></div><div><dt>Retention</dt><dd>{a.retention_value} {a.retention_unit.toLowerCase()}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>;})}{!reportAssignments.length&&<p>No items assigned to this agency.</p>}</div>}
+   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header>{reportAgency.logo_url&&<img className={styles.reportLogo} src={reportAgency.logo_url} alt={reportAgency.agency_name+' logo'}/>}<h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><p>A fresh cinematic cover is created from this agency’s name and saved logo each time you export. The PDF includes the date printed.</p><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}{reportGroups.map((group,index)=><section key={group.type} className={styles.catalogSection+' '+styles.reportGroup} data-item-type={group.type} aria-labelledby={'report-type-'+index}><header className={styles.catalogHeader}><h3 id={'report-type-'+index}>{group.type}</h3><span className={styles.catalogCount}>{group.rows.length} {group.rows.length===1?'item':'items'}</span></header>{group.rows.map(({assignment:a,item})=><article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h4>{item?.name||'Unavailable item'}</h4><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source}</dd></div><div><dt>Retention</dt><dd>{a.retention_value} {a.retention_unit.toLowerCase()}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>)}</section>)}{!reportGroups.length&&<p>No items assigned to this agency.</p>}</div>}
   </section>
  </main>;
 }
+

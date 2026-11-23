@@ -3,8 +3,8 @@ import {FormEvent,useState} from 'react';
 import {Agency,Item,Assignment,formatRetention} from './types';
 import styles from './rules.module.css';
 type Draft={item_id:string;data_source:string;retention_value:string;retention_unit:string;expected_updated_at:string|null};
-type Props={agencyId:string;agencies:Agency[];items:Item[];assignments:Assignment[];canManage:boolean;disabled:boolean;onAgency:(id:string)=>void;onSave:(rows:Draft[])=>Promise<boolean>};
-export default function AssignmentWorkspace({agencyId,agencies,items,assignments,canManage,disabled,onAgency,onSave}:Props){
+type Props={agencyId:string;agencies:Agency[];items:Item[];assignments:Assignment[];canManage:boolean;disabled:boolean;onAgency:(id:string)=>void;onSave:(rows:Draft[])=>Promise<boolean>;onUnassign:(assignment:Assignment)=>Promise<boolean>};
+export default function AssignmentWorkspace({agencyId,agencies,items,assignments,canManage,disabled,onAgency,onSave,onUnassign}:Props){
  const [drafts,setDrafts]=useState<Draft[]>([]),[search,setSearch]=useState(''),[view,setView]=useState<'add'|'existing'>(canManage?'add':'existing');
  const [bulkNotice,setBulkNotice]=useState('');
  const agency=agencies.find(a=>a.id===agencyId),saved=assignments.filter(a=>a.agency_id===agencyId);
@@ -26,6 +26,12 @@ export default function AssignmentWorkspace({agencyId,agencies,items,assignments
  const visibleSaved=saved.filter(a=>{const i=items.find(i=>i.id===a.item_id);return i&&matches(i);}).sort((a,b)=>compareNames(itemNames.get(a.item_id)||'',itemNames.get(b.item_id)||''));
  function select(item_id:string,existing?:Assignment){setDrafts(rows=>rows.some(r=>r.item_id===item_id)?rows:[...rows,{item_id,data_source:existing?.data_source||'',retention_value:existing?.retention_value==null?'':String(existing.retention_value),retention_unit:existing?.retention_unit||'',expected_updated_at:existing?.updated_at||null}]);}
  function update(id:string,patch:Partial<Draft>){setDrafts(rows=>rows.map(r=>r.item_id===id?{...r,...patch}:r));}
+ async function unassign(assignment:Assignment){
+  if(disabled||!canManage||!agency?.active||drafts.some(row=>row.item_id===assignment.item_id))return;
+  const name=itemNames.get(assignment.item_id)||'this tool';
+  if(!window.confirm(`Unassign ${name} from ${agency.agency_name}?\n\nThis removes its data source and retention details for this agency. The item stays in the catalog.`))return;
+  if(await onUnassign(assignment))setBulkNotice('');
+ }
  async function submit(e:FormEvent){e.preventDefault();if(await onSave(drafts)){setDrafts([]);setBulkNotice('');}}
  return <form onSubmit={submit} className={styles.assignmentWorkspace}>
   <div className={styles.assignmentBar}><label>Agency<select required disabled={disabled||drafts.length>0} value={agencyId} onChange={e=>{onAgency(e.target.value);setSearch('');setBulkNotice('');}}><option value="">Choose agency</option>{agencies.map(a=><option key={a.id} value={a.id}>{a.agency_name}{a.active?'':' (Inactive)'}</option>)}</select></label><div className={styles.actions}>{canManage&&<><button type="button" disabled={disabled||!drafts.length} onClick={()=>{setDrafts([]);setBulkNotice('');}}>Clear selection</button><button type="submit" className={styles.primary} disabled={disabled||!agency?.active||!drafts.length}>{disabled?'Please wait…':`Save ${drafts.length||''} assignment${drafts.length===1?'':'s'}`}</button></>}</div><p>{agency?.agency_name||'Select an agency to review its tools.'}{drafts.length>0?' · Save or clear your selection before switching agencies.':''}</p></div>
@@ -33,7 +39,7 @@ export default function AssignmentWorkspace({agencyId,agencies,items,assignments
   {view==='add'?available.map(i=><label className={styles.toolOption} key={i.id}><input type="checkbox" checked={drafts.some(r=>r.item_id===i.id)} disabled={disabled||!canManage||!agency?.active||(!drafts.some(r=>r.item_id===i.id)&&drafts.length>=100)} onChange={e=>e.target.checked?select(i.id):setDrafts(rows=>rows.filter(r=>r.item_id!==i.id))}/><span>{i.name}<small>{i.item_type}</small></span></label>):visibleSaved.map(a=>{const item=items.find(i=>i.id===a.item_id);return <div className={styles.savedTool} key={a.id}><div><strong>{item?.name}</strong><small>{a.data_source||'Not specified'} · {formatRetention(a)}</small></div>{canManage&&<button type="button" disabled={disabled||!agency?.active||drafts.some(r=>r.item_id===a.item_id)||drafts.length>=100} onClick={()=>select(a.item_id,a)}>Edit</button>}</div>;})}
   {(view==='add'?!available.length:!visibleSaved.length)&&<p>No {view==='add'?'available':'assigned'} tools match.</p>}</div></section>
   <section className={styles.panel}><h2>Assignment details <span className={styles.badge}>{saved.length} assigned{drafts.length>0?` · ${drafts.length} selected`:''}</span></h2>
-   <p className={styles.description}>Assigned tools are listed below.{canManage?' Select Edit to change an assignment.':''} Data source, retention, and unit are optional. Save up to 100 assignments together.</p>
+   <p className={styles.description}>Assigned tools are listed below.{canManage?' Select Edit to change an assignment or Unassign to remove it from this agency.':''} Data source, retention, and unit are optional. Save up to 100 assignments together.</p>
    {detailItemIds.length?<div className={styles.assignmentTable}><table><thead><tr><th>Assigned Tool</th><th>Data source</th><th>Retention</th><th>Unit</th><th><span className="sr-only">Actions</span></th></tr></thead>
     <tbody>{detailItemIds.map(itemId=>{
      const item=items.find(i=>i.id===itemId),name=item?.name||'Unavailable item',draft=drafts.find(r=>r.item_id===itemId),existing=saved.find(a=>a.item_id===itemId);
@@ -41,7 +47,7 @@ export default function AssignmentWorkspace({agencyId,agencies,items,assignments
       <td>{draft?<input aria-label={`Data source for ${name}`} maxLength={250} disabled={disabled} value={draft.data_source} onChange={e=>update(itemId,{data_source:e.target.value})}/>:existing?.data_source||'Not specified'}</td>
       <td>{draft?<input aria-label={`Retention period for ${name}`} type="number" min={1} max={9999} step={1} disabled={disabled} value={draft.retention_value} onChange={e=>update(itemId,{retention_value:e.target.value})}/>:existing?.retention_value??'Not specified'}</td>
       <td>{draft?<select aria-label={`Period unit for ${name}`} disabled={disabled} value={draft.retention_unit} onChange={e=>update(itemId,{retention_unit:e.target.value})}><option value="">Not specified</option>{['Days','Months','Years'].map(u=><option key={u}>{u}</option>)}</select>:existing?.retention_unit||'Not specified'}</td>
-      <td>{draft?<button type="button" aria-label={`${existing?'Cancel editing':'Remove'} ${name}${existing?'':' from selection'}`} disabled={disabled} onClick={()=>setDrafts(rows=>rows.filter(r=>r.item_id!==itemId))}>{existing?'Cancel edit':'Remove'}</button>:canManage&&existing&&<button type="button" aria-label={`Edit ${name} assignment`} disabled={disabled||!agency?.active||drafts.length>=100} onClick={()=>select(itemId,existing)}>Edit</button>}</td>
+      <td>{draft?<button type="button" aria-label={`${existing?'Cancel editing':'Remove'} ${name}${existing?'':' from selection'}`} disabled={disabled} onClick={()=>setDrafts(rows=>rows.filter(r=>r.item_id!==itemId))}>{existing?'Cancel edit':'Remove'}</button>:canManage&&existing&&<div className={styles.rowActions}><button type="button" aria-label={`Edit ${name} assignment`} disabled={disabled||!agency?.active||drafts.length>=100} onClick={()=>select(itemId,existing)}>Edit</button><button type="button" className={styles.unassignButton} aria-label={`Unassign ${name} from ${agency?.agency_name}`} disabled={disabled||!agency?.active} onClick={()=>void unassign(existing)}>Unassign</button></div>}</td>
      </tr>;
     })}</tbody></table></div>:<p>{!agencyId?'Select an agency to view its assigned tools.':'No tools are assigned to this agency.'}{agencyId&&canManage?' Select tools on the left to add assignments.':''}</p>}
   </section></div>

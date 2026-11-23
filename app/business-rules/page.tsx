@@ -124,6 +124,22 @@ export default function AgencyBusinessRulesPage(){
    return true;
   }catch(e){setError(e instanceof Error?e.message:'Unable to save assignments. No assignments were saved.');return false;}finally{setBusy(false);}
  }
+ async function unassignAssignment(assignment:Assignment){
+  if(!canManage||busy||loading||assignment.agency_id!==agencyId)return false;
+  const agency=agencies.find(a=>a.id===agencyId);
+  if(!agency?.active)return false;
+  const name=items.find(item=>item.id===assignment.item_id)?.name||'Tool';
+  setBusy(true);setError('');setMessage('');
+  try{
+   const {data,error:unassignError}=await supabase.rpc('unassign_business_rule_assignment',{p_agency_id:assignment.agency_id,p_assignment_id:assignment.id,p_expected_updated_at:assignment.updated_at});
+   if(unassignError)throw new Error(unassignError.message);
+   if(data!==true)throw new Error('Unable to confirm the assignment was removed. Refresh records before trying again.');
+   setAssignments(rows=>rows.filter(row=>row.id!==assignment.id));
+   if(await load())setMessage(`${name} unassigned from ${agency.agency_name}.`);
+   else setError('Tool unassigned, but records could not refresh. Refresh records before editing again.');
+   return true;
+  }catch(e){setError(e instanceof Error?e.message:'Unable to unassign this tool. Refresh records and try again.');return false;}finally{setBusy(false);}
+ }
  async function exportPdf(){
   if(!reportAgency||loading||busy||error)return;
   setBusy(true);setExportStage('cover');setMessage('');setExportError('');
@@ -179,7 +195,7 @@ export default function AgencyBusinessRulesPage(){
   </section>
   <section id="rules-panel-assign" role="tabpanel" aria-labelledby="rules-tab-assign" hidden={tab!=='assign'}>
    <p className={styles.description}>{descriptions.assign}</p>
-   <AssignmentWorkspace key={agencyId} agencyId={agencyId} agencies={agencies} items={items} assignments={assignments} canManage={canManage} disabled={disabled} onAgency={setAgencyId} onSave={saveAssignments}/>
+   <AssignmentWorkspace key={agencyId} agencyId={agencyId} agencies={agencies} items={items} assignments={assignments} canManage={canManage} disabled={disabled} onAgency={setAgencyId} onSave={saveAssignments} onUnassign={unassignAssignment}/>
 
   </section>
   <section id="rules-panel-report" role="tabpanel" aria-labelledby="rules-tab-report" hidden={tab!=='report'}>

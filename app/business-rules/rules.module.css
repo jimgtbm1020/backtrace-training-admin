@@ -58,29 +58,74 @@
 .page .toolDescription{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:100%;margin-top:6px;font-size:12px;font-weight:400;line-height:1.45;color:var(--rules-muted);white-space:normal;overflow-wrap:anywhere}
 .assignmentTable .toolDescription{max-width:32ch}
 
-/* Readable saved catalog entries with consistently labeled content. */
+/* Saved catalog entries: strong hierarchy without changing stored wording. */
 .savedItemsHeading{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .savedItemsHeading h2{margin:0;font-size:22px}
-.savedItems .catalogBody{display:grid;gap:16px;padding:20px;background:#f8fafc}
+.savedItemsHeading .badge{font-size:14px;font-weight:700;padding:8px 12px}
+.savedItems .catalogBody{display:grid;gap:22px;padding:22px;background:#edf2f8}
 .savedItems .catalogEmpty{padding:4px 0}
-.savedItemCard{min-width:0;background:#fff;border:1px solid var(--rules-line);border-radius:10px;overflow:hidden}
-.savedItemHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:18px 20px;border-bottom:1px solid var(--rules-line)}
-.savedItemHeader .catalogItemName{margin:0;font-size:20px;line-height:1.4;color:var(--rules-ink)}
-.page .savedItemEdit{flex-shrink:0;white-space:nowrap;font-weight:600;border-color:#b9cce3;color:#254d7e}
-.page .savedItemEdit:hover:not(:disabled){background:#edf3fa;border-color:#254d7e}
-.page .savedItemEdit:focus-visible{outline:3px solid #82b2eb;outline-offset:3px}
-.savedItemDetails{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:0;margin:0;padding:20px}
-.savedItemDetails>div{min-width:0}
-.savedItemDetails>div+div{border-left:1px solid var(--rules-line);margin-left:24px;padding-left:24px}
-.savedItemDetails dt{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#53677f}
-.savedItemDetails dd{margin:0;font-size:15px;line-height:1.65;color:var(--rules-ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.savedItemCard{min-width:0;background:#fff;border:1px solid #bfcddd;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px #1732510c}
+.savedItemHeader{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:22px 26px;border-bottom:3px solid #c9a754;background:#173251;color:#fff}
+.savedItemHeader .catalogItemName{margin:7px 0 0;font-size:24px;line-height:1.3;color:#fff}
+.itemTypeTag{display:inline-block;border:1px solid #8da5c2;border-radius:5px;padding:3px 8px;font-size:12px;font-weight:700;letter-spacing:.06em;color:#edf3fc}
+.page .savedItemEdit{flex-shrink:0;white-space:nowrap;font-weight:700;font-size:14px;min-height:42px;padding:10px 18px;border-color:#d4b467;background:#f4dfa7;color:#20334e}
+.page .savedItemEdit:hover:not(:disabled){background:#ffeab4;border-color:#fff0c7}
+.page .savedItemEdit:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.savedItemDetails{display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin:0}
+.savedItemDetails>div{min-width:0;padding:24px 26px}
+.savedItemDetails dt{display:flex;align-items:center;gap:10px;margin:0 0 14px;font-size:15px;font-weight:800;letter-spacing:.02em;color:#173251}
+.detailMarker{width:5px;height:19px;background:#3b6b9b;border-radius:3px;flex-shrink:0}
+.savedItemDetails dd{margin:0;font-size:16px;line-height:1.75;color:var(--rules-ink);overflow-wrap:anywhere}
+.savedItemDetails .expectedOutcome{background:#f0f5fb;border-top:1px solid #d5e0ed}
+.expectedOutcome .detailMarker{background:#a27a20}
+.catalogContent p{margin:0 0 16px;white-space:pre-line}
+.catalogContent>:last-child{margin-bottom:0}
+.catalogContent strong{font-weight:750;color:#102d50}
+.catalogContent .contentHeading{font-weight:800;margin:18px 0 10px}
+.catalogContent ul,.catalogContent ol{display:grid;gap:10px;margin:16px 0;padding-left:24px}
+.catalogContent li{white-space:pre-line;padding:5px 0 5px 6px}
+.catalogContent li::marker{color:#315f8c;font-weight:800}
+.expectedOutcome .catalogContent ul,.expectedOutcome .catalogContent ol{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px}
+.expectedOutcome .catalogContent li{background:#fff;border:1px solid #d4e0ed;border-radius:7px;padding:14px 16px;box-shadow:0 2px 5px #17325105}
+.outcomeLabel{display:block;margin-bottom:4px}
+.catalogToolbar{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 24px;background:#eaf1f9;border:1px solid #c6d6e8;border-radius:12px;margin-bottom:20px}
+.catalogToolbar strong{font-size:17px;color:#173251}
+.catalogToolbar p{font-size:14px;margin:6px 0 0;color:#425b76}
+.page .catalogToolbar button{min-height:44px;padding:10px 22px;font-size:15px;font-weight:700;flex-shrink:0}
+
+/* Native modal dialog keeps the list's scroll position and contains keyboard focus. */
+.itemEditorDialog{position:fixed;inset:0 0 0 auto;margin:0;border:0;border-left:1px solid #8da5c2;padding:0;width:min(760px,100vw);max-width:100vw;height:100dvh;max-height:100dvh;background:#fff;color:var(--rules-ink);box-shadow:-18px 0 60px #102b4930;box-sizing:border-box}
+.itemEditorDialog::backdrop{background:#102b4970}
+.itemEditorShell{height:100%;display:flex;flex-direction:column;min-height:0}
+.itemEditorHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:24px 28px;background:#173251;color:#fff;border-bottom:3px solid #c9a754;flex-shrink:0}
+.itemEditorHeader .editorEyebrow{color:#e6cd94;font-size:12px}
+.itemEditorHeader h2{margin:0;font-size:26px;color:#fff}
+.itemEditorHeader p{margin:8px 0 0;font-size:15px;color:#e1ebf6;overflow-wrap:anywhere}
+.page .itemEditorHeader button{background:#244563;color:#fff;border-color:#839db8;flex-shrink:0;min-height:40px;font-size:14px}
+.itemEditorBody{padding:26px 28px;overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:0}
+.itemEditorBody .fields{gap:22px}
+.itemEditorBody label{font-size:15px}
+.page .itemEditorBody input,.page .itemEditorBody select,.page .itemEditorBody textarea{font-size:16px;line-height:1.6;padding:10px 12px}
+.page .itemEditorBody input,.page .itemEditorBody select{height:46px;min-height:46px}
+.itemEditorBody .formattingHint{grid-column:1/-1;font-size:14px;line-height:1.6;padding:12px 14px;margin:0;background:#f1f5fa;border-left:3px solid #c9a754;border-radius:5px;color:#425b76}
+.itemEditorFooter{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding:18px 28px;border-top:1px solid #c9d7e7;background:#fff;box-shadow:0 -5px 18px #17325108;flex-shrink:0}
+.editorSaveHint{font-size:13px;color:#53677f;flex:1;min-width:130px}
+.page .itemEditorFooter button{font-size:15px;min-height:44px;padding:10px 18px;font-weight:650}
+.page .itemEditorDialog button:focus-visible,.page .itemEditorDialog input:focus-visible,.page .itemEditorDialog select:focus-visible,.page .itemEditorDialog textarea:focus-visible,.page .catalogToolbar button:focus-visible{outline:3px solid #b78228;outline-offset:3px}
+.editorError{flex-basis:100%;margin:0;font-size:14px;line-height:1.5;color:#922c2c;padding:10px 12px;background:#fff1f0;border:1px solid #e3b7b4;border-radius:6px}
+.discardPrompt{width:100%;border-left:3px solid #a27a20;padding-left:14px}
+.discardPrompt p{margin:0 0 10px;font-weight:700;font-size:15px}
 @media(max-width:700px){
- .savedItems .catalogBody{padding:12px;gap:12px}
- .savedItemHeader{padding:16px;gap:12px;flex-wrap:wrap}
- .savedItemHeader .catalogItemName{font-size:18px}
- .savedItemDetails{grid-template-columns:minmax(0,1fr);padding:16px;gap:18px}
- .savedItemDetails>div+div{border-left:0;border-top:1px solid var(--rules-line);margin-left:0;padding-left:0;padding-top:16px}
- .savedItemDetails dd{font-size:14px}
+ .savedItems .catalogBody{padding:12px;gap:16px}
+ .savedItemHeader{padding:18px;gap:12px;flex-wrap:wrap}
+ .savedItemHeader .catalogItemName{font-size:21px}
+ .savedItemDetails>div{padding:20px 18px}
+ .expectedOutcome .catalogContent ul,.expectedOutcome .catalogContent ol{grid-template-columns:minmax(0,1fr)}
+ .catalogToolbar{padding:18px;align-items:flex-start;flex-wrap:wrap}
+ .itemEditorHeader,.itemEditorBody{padding:20px}
+ .itemEditorBody .fields{grid-template-columns:minmax(0,1fr)}
+ .itemEditorFooter{padding:14px 20px max(14px,env(safe-area-inset-bottom))}
+ .itemEditorFooter .actions{flex:1;justify-content:flex-end}
 }
 
 .descriptionAssistant{margin-top:-8px}

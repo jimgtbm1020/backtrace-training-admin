@@ -1,128 +1,190 @@
 import {jsPDF} from 'jspdf';
-import {defaultOverviewHeading,hasOverview,overviewBlocks,overviewSpans} from './overview-text';
+import {reportFontRegular,reportFontBold} from './report-fonts';
+import {defaultOverviewHeading,hasOverview} from './overview-text';
 import {Agency,Item,Assignment,agencyAddress,formatRetention} from './types';
 import {groupAgencyAssignments,itemTypeColor} from './item-groups';
+import {cleanReportText,reportBlocks,reportSpans,ReportSpan} from './report-text';
+
+type Color=[number,number,number];
+type RichLine=ReportSpan[];
+const ink:Color=[24,46,71],muted:Color=[77,96,117],gold:Color=[181,140,49],navy:Color=[21,48,78];
+const blueTint:Color=[239,245,251],goldTint:Color=[250,247,235],lineColor:Color=[210,221,232];
 
 export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assignment[],logoData?:string,coverData?:string){
  const groups=groupAgencyAssignments(agency.id,items,assignments);
  if(groups.some(group=>group.rows.some(row=>!row.item)))throw new Error('An assigned item is unavailable. Refresh before exporting.');
  const doc=new jsPDF({unit:'pt',format:'letter'});
- const margin=42,width=528,bottom=738;let y=52,toolName='',shade:[number,number,number]=[255,255,255];
- let activeGroup:{type:string;count:number}|null=null;
- const clean=(value:string)=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/[\u2013\u2014]/g,'-');
- const wrap=(value:string,w=width-28):string[]=>{doc.setFont('helvetica','normal');doc.setFontSize(10);return doc.splitTextToSize(clean(value||'Not specified'),w);};
- function groupHeading(type:string,continued=false){
-  doc.setFont('helvetica','bold');doc.setFontSize(16);
-  const lines:string[]=doc.splitTextToSize(clean(type+(continued?' (continued)':'')),width-128);
-  return {lines,height:Math.max(42,lines.length*19+20)};
- }
- function drawGroupHeading(continued=false){
+ doc.addFileToVFS('OpenSans-Regular.ttf',reportFontRegular);doc.addFont('OpenSans-Regular.ttf','ReportSans','normal');
+ doc.addFileToVFS('OpenSans-Bold.ttf',reportFontBold);doc.addFont('OpenSans-Bold.ttf','ReportSans','bold');
+ doc.setProperties({title:'Agency Business Rules - '+agency.agency_name,subject:'Agency item descriptions, data sources, retention and expected outcomes',creator:'Backtrace Training Administration'});
+ const margin=40,width=532,bottom=738,bodySize=10.5,leading=14.5;
+ const contentsRows:{type:string;page:number;y:number}[]=[];const groupPages=new Map<string,number>();
+ let y=52,activeGroup:{type:string;count:number}|null=null,activeItem:Item|null=null,overviewTitle='';
+ const clean=(value:string)=>cleanReportText(value||'Not specified');
+ function font(size:number,bold=false,color:Color=ink){doc.setFont('ReportSans',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...color);doc.setCharSpace(0);}
+ function wrap(value:string,w:number,size=bodySize,bold=false):string[]{font(size,bold);return doc.splitTextToSize(clean(value),w);}
+ function bandHeight(type:string){return Math.max(36,wrap(type,width-120,14,true).length*17+16);}
+ function groupBand(continued=false){
   if(!activeGroup)return;
-  const {lines,height}=groupHeading(activeGroup.type,continued);
-  doc.setFillColor(...itemTypeColor(activeGroup.type));doc.roundedRect(margin,y,width,height,6,6,'F');
-  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(255,255,255);doc.text(lines,margin+14,y+26,{lineHeightFactor:19/16});
-  doc.setFontSize(10);doc.text(activeGroup.count+' '+(activeGroup.count===1?'item':'items'),margin+width-14,y+26,{align:'right'});
-  y+=height+10;
+  const label=activeGroup.type+(continued?' (continued)':'');
+  const lines=wrap(label,width-120,14,true),height=Math.max(36,lines.length*17+16);
+  doc.setFillColor(...itemTypeColor(activeGroup.type));doc.roundedRect(margin,y,width,height,5,5,'F');
+  font(14,true,[255,255,255]);doc.text(lines,margin+14,y+23,{lineHeightFactor:17/14});
+  font(10,true,[255,255,255]);doc.text(activeGroup.count+' '+(activeGroup.count===1?'item':'items'),margin+width-14,y+23,{align:'right'});y+=height+10;
+ }
+ function itemHeader(continued=false){
+  if(!activeItem)return;
+  const title=wrap(activeItem.name+(continued?' (continued)':''),width-115,14,true),height=Math.max(36,title.length*17+17);
+  doc.setFillColor(...navy);doc.roundedRect(margin,y,width,height,5,5,'F');
+  doc.setFillColor(...gold);doc.rect(margin,y+height-3,width,3,'F');
+  font(14,true,[255,255,255]);doc.text(title,margin+14,y+24,{lineHeightFactor:17/14});
+  const type=wrap(activeItem.item_type,80,9,true);font(9,true,[230,235,244]);doc.text(type,margin+width-14,y+23,{align:'right',lineHeightFactor:1.2});y+=height+8;
  }
  function nextPage(continued=false){
-  doc.addPage();doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text('BACKTRACE | Agency Business Rules',margin,30);y=52;
-  drawGroupHeading(true);
-  if(continued){doc.setFontSize(10);doc.setTextColor(26,46,73);const name=doc.splitTextToSize(clean(toolName+' (continued)'),width);doc.text(name,margin,y);y+=name.length*14+10;}
+  doc.addPage();font(8.5,true,muted);doc.text('BACKTRACE  /  AGENCY BUSINESS RULES',margin,28);
+  doc.setDrawColor(...lineColor);doc.setLineWidth(.6);doc.line(margin,36,margin+width,36);y=50;
+  groupBand(true);
+  if(continued&&activeItem)itemHeader(true);
+  else if(continued&&overviewTitle){font(12,true);const lines=wrap(overviewTitle+' (continued)',width,12,true);doc.text(lines,margin,y+15);y+=lines.length*15+16;}
  }
- function fill(height:number){doc.setFillColor(...shade);doc.rect(margin,y,width,height,'F');}
- function paragraph(label:string,value:string){
-  const lines=wrap(value);let continued=false;
-  while(lines.length){
-   let capacity=Math.floor((bottom-y-30)/14);
-   if(capacity<1){nextPage(true);capacity=Math.floor((bottom-y-30)/14);}
-   const chunk=lines.splice(0,capacity),height=26+chunk.length*14;fill(height);
-   doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text(label+(continued?' (continued)':''),margin+14,y+13);
-   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(26,46,73);doc.text(chunk,margin+14,y+28);y+=height;continued=true;
+ function richLines(spans:ReportSpan[],available:number):RichLine[]{
+  const lines:RichLine[]=[];let line:RichLine=[],used=0;
+  const flush=()=>{while(line.length&&/^\s*$/.test(line[line.length-1].text))line.pop();if(line.length){line[line.length-1].text=line[line.length-1].text.trimEnd();lines.push(line);}line=[];used=0;};
+  const add=(text:string,bold:boolean)=>{font(bodySize,bold);const w=doc.getTextWidth(text);const last=line[line.length-1];if(last?.bold===bold)last.text+=text;else line.push({text,bold});used+=w;};
+  for(const span of spans)for(const token of span.text.match(/\s+|\S+/g)||[]){
+   if(/^\s+$/.test(token)){if(used>0)add(' ',span.bold);continue;}
+   font(bodySize,span.bold);const tokenWidth=doc.getTextWidth(token);
+   if(used>0&&used+tokenWidth>available)flush();
+   if(tokenWidth<=available)add(token,span.bold);
+   else for(const char of token){font(bodySize,span.bold);if(used+doc.getTextWidth(char)>available)flush();add(char,span.bold);}
   }
+  flush();return lines.length?lines:[[{text:'Not specified',bold:false}]];
  }
- function sourceLines(source:string|null):string[]{doc.setFont('helvetica','bold');doc.setFontSize(11);return doc.splitTextToSize(clean(source||'Not specified'),340);}
+ function drawLines(lines:RichLine[],x:number,baseline:number,color:Color=ink){
+  lines.forEach((runs,index)=>{let left=x;for(const run of runs){font(bodySize,run.bold,color);doc.text(run.text,left,baseline+index*leading);left+=doc.getTextWidth(run.text);}});
+ }
+ function sectionLabel(label:string,continued=false,tint:Color=[255,255,255]){
+  doc.setFillColor(...tint);doc.rect(margin,y,width,22,'F');doc.setFillColor(...gold);doc.rect(margin+13,y+5,3,12,'F');
+  font(10,true);doc.text(label+(continued?' (continued)':''),margin+24,y+15);y+=22;
+ }
+ function content(label:string,value:string,tinted=false){
+  const tint=tinted?goldTint:[255,255,255] as Color;
+  const blocks=reportBlocks(value||'Not specified');
+  const prepared=blocks.map(block=>({block,lines:richLines(reportSpans(block.text,!!block.marker||(!block.heading&&/^[^:]{1,75}:\s/.test(block.text))),width-32-(block.marker?15:0))}));
+  const firstHeight=(prepared[0]?.lines.length||1)*leading+6;
+  if(y+22+Math.min(firstHeight,160)+4>bottom)nextPage(true);
+  sectionLabel(label,false,tint);
+  let contentOnPage=false;
+  for(const {block,lines:original} of prepared){
+   const lines=[...original];let firstChunk=true;
+   const blockHeight=lines.length*leading+6;
+   // Keep short bullets/paragraphs intact; split large blocks without losing text.
+   if(blockHeight<=160&&y+blockHeight>bottom&&contentOnPage){nextPage(true);sectionLabel(label,true,tint);contentOnPage=false;}
+   while(lines.length){
+    let capacity=Math.floor((bottom-y-9)/leading);
+    if(capacity<1){nextPage(true);sectionLabel(label,true,tint);capacity=Math.floor((bottom-y-9)/leading);contentOnPage=false;}
+    // Avoid leaving a single final line on the next page when space permits.
+    if(lines.length===capacity+1&&capacity>2)capacity--;
+    const chunk=lines.splice(0,capacity),height=chunk.length*leading+6;
+    doc.setFillColor(...tint);doc.rect(margin,y,width,height,'F');
+    if(block.marker&&firstChunk){font(10,true,gold);doc.text(block.marker,margin+16,y+11);}
+    const drawn=block.heading?chunk.map(line=>line.map(span=>({...span,bold:true}))):chunk;
+    drawLines(drawn,margin+16+(block.marker?15:0),y+11);y+=height;contentOnPage=true;firstChunk=false;
+   }
+  }
+  y+=4;
+ }
  function metadata(source:string|null,retention:string){
-  const left=sourceLines(source),right=wrap(retention,118);let continued=false;
+  const left=wrap(source||'Not specified',332,11,true),right=wrap(retention,136,11,true);let continued=false;
   while(left.length||right.length){
-   let capacity=Math.floor((bottom-y-32)/15);
-   if(capacity<1){nextPage(true);capacity=Math.floor((bottom-y-32)/15);}
-   const sourceChunk=left.splice(0,capacity),retentionChunk=right.splice(0,capacity),height=32+Math.max(sourceChunk.length,retentionChunk.length)*15;
-   doc.setFillColor(237,243,250);doc.rect(margin,y,width,height,'F');
-   doc.setFillColor(199,163,75);doc.rect(margin,y,3,height,'F');
-   doc.setDrawColor(212,223,237);doc.line(margin+370,y+8,margin+370,y+height-8);
-   doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(32,51,78);doc.text('Data source'+(continued?' (continued)':''),margin+14,y+15);doc.text('Retention',margin+382,y+15);
-   doc.setFontSize(11);if(sourceChunk.length)doc.text(sourceChunk,margin+14,y+31,{lineHeightFactor:15/11});
-   doc.setFont('helvetica','normal');doc.setFontSize(10);if(retentionChunk.length)doc.text(retentionChunk,margin+382,y+31,{lineHeightFactor:1.5});
-   y+=height;continued=true;
+   let capacity=Math.floor((bottom-y-26)/15);
+   if(capacity<1){nextPage(true);capacity=Math.floor((bottom-y-26)/15);}
+   const a=left.splice(0,capacity),b=right.splice(0,capacity),height=26+Math.max(a.length,b.length)*15;
+   doc.setFillColor(...blueTint);doc.roundedRect(margin,y,360,height,4,4,'F');
+   doc.setFillColor(...goldTint);doc.roundedRect(margin+368,y,width-368,height,4,4,'F');
+   font(8.5,true,muted);doc.text('DATA SOURCE'+(continued?' (CONTINUED)':''),margin+13,y+13);doc.text('RETENTION',margin+381,y+13);
+   font(11,true);if(a.length)doc.text(a,margin+13,y+27,{lineHeightFactor:15/11});if(b.length)doc.text(b,margin+381,y+27,{lineHeightFactor:15/11});y+=height+8;continued=true;
   }
  }
  if(coverData){
   const image=doc.getImageProperties(coverData),scale=Math.max(612/image.width,792/image.height),w=image.width*scale,h=image.height*scale;
   doc.addImage(coverData,image.fileType,(612-w)/2,(792-h)/2,w,h);
-  doc.setFillColor(10,28,49);doc.rect(30,575,552,187,'F');doc.setDrawColor(199,163,75);doc.setLineWidth(2);doc.line(54,594,558,594);
-  doc.setFont('helvetica','bold');doc.setFontSize(25);doc.setTextColor(255,255,255);doc.text('Agency Business Rules',54,629);
-  doc.setFontSize(16);const agencyLines=doc.splitTextToSize(clean(agency.agency_name),504);doc.text(agencyLines,54,660);
-  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(218,227,239);doc.text('BACKTRACE TRAINING ADMINISTRATION',54,721);doc.text('Date printed: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'}),54,741);
+  doc.setFillColor(10,28,49);doc.rect(30,575,552,187,'F');doc.setDrawColor(...gold);doc.setLineWidth(2);doc.line(54,594,558,594);
+  font(25,true,[255,255,255]);doc.text('Agency Business Rules',54,629);
+  font(16,true,[255,255,255]);const agencyLines=doc.splitTextToSize(clean(agency.agency_name),504);doc.text(agencyLines,54,660);
+  font(10,false,[218,227,239]);doc.text('BACKTRACE TRAINING ADMINISTRATION',54,721);doc.text('Date printed: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'}),54,741);
   doc.addPage();
  }
- if(logoData){const props=doc.getImageProperties(logoData);const scale=Math.min(64/props.width,64/props.height);doc.addImage(logoData,props.fileType,margin+width-64,42,props.width*scale,props.height*scale);}
- doc.setTextColor(91,107,127);doc.setFontSize(9);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
- doc.setTextColor(26,46,73);doc.setFontSize(22);doc.text('Agency Business Rules',margin,62);
- doc.setFontSize(14);const names=doc.splitTextToSize(clean(agency.agency_name),logoData?width-86:width);doc.text(names,margin,88);y=88+names.length*17;
- doc.setFontSize(10);const address=doc.splitTextToSize(clean(agencyAddress(agency)),logoData?width-86:width);doc.text(address,margin,y);y+=address.length*14+18;
- doc.setDrawColor(210,220,233);doc.line(margin,y-8,margin+width,y-8);
- if(hasOverview(agency)){
-  toolName=agency.overview_heading||defaultOverviewHeading;
-  doc.setFont('helvetica','bold');doc.setFontSize(15);
-  const heading=doc.splitTextToSize(clean(toolName),width-28);doc.setTextColor(26,46,73);doc.text(heading,margin+14,y+18);y+=heading.length*19+14;
-  for(const block of [...overviewBlocks(agency.overview_introduction||''),...overviewBlocks(agency.overview_features||'')]){
-   let x=margin+14+(block.bullet?12:0);const startX=x,right=margin+width-14;
-   if(y+18>bottom)nextPage(true);
-   doc.setFontSize(10);doc.setTextColor(26,46,73);
-   if(block.bullet){doc.setFont('helvetica','normal');doc.text('-',margin+14,y);}
-   for(const span of overviewSpans(block.text)){
-    for(const word of clean(span.text).split(/(\s+)/).filter(Boolean)){
-     doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);
-     if(word.trim()&&doc.getTextWidth(word)<=right-startX&&x+doc.getTextWidth(word)>right){x=startX;y+=14;if(y+14>bottom){nextPage(true);doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);doc.setTextColor(26,46,73);}}
-     // Character wrapping also handles long unbroken identifiers without clipping.
-     for(const char of word){const w=doc.getTextWidth(char);if(x+w>right){x=startX;y+=14;if(y+14>bottom){nextPage(true);doc.setFont('helvetica',span.bold?'bold':'normal');doc.setFontSize(10);doc.setTextColor(26,46,73);}}if(x===startX&&/\s/.test(char))continue;doc.text(/\s/.test(char)?' ':char,x,y);x+=w;}
-    }
-   }
-   y+=24;
-  }
-  y+=10;
+ font(8.5,true,muted);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
+ font(24,true);doc.text('Agency Business Rules',margin,66);
+ const names=wrap(agency.agency_name,logoData?width-88:width,16,true);font(16,true);doc.text(names,margin,93,{lineHeightFactor:1.25});y=99+names.length*20;
+ const address=agencyAddress(agency);if(address){const lines=wrap(address,width,10);font(10,false,muted);doc.text(lines,margin,y);y+=lines.length*14;}
+ if(logoData){const props=doc.getImageProperties(logoData),scale=Math.min(62/props.width,62/props.height);doc.addImage(logoData,props.fileType,margin+width-62,44,props.width*scale,props.height*scale);}
+ doc.setDrawColor(...gold);doc.setLineWidth(2);doc.line(margin,y,margin+width,y);y+=14;
+ const totals=[{label:'Assigned items',count:groups.reduce((sum,g)=>sum+g.rows.length,0),color:navy},...groups.map(g=>({label:g.type,count:g.rows.length,color:itemTypeColor(g.type)}))];
+ const cols=Math.min(4,totals.length),tileWidth=(width-(cols-1)*8)/cols;
+ for(let start=0;start<totals.length;start+=cols){
+  if(y+62>bottom)nextPage();
+  totals.slice(start,start+cols).forEach((entry,i)=>{const x=margin+i*(tileWidth+8);doc.setFillColor(...blueTint);doc.roundedRect(x,y,tileWidth,46,4,4,'F');doc.setFillColor(...entry.color);doc.rect(x,y,3,46,'F');font(20,true,entry.color);doc.text(String(entry.count),x+12,y+22);font(9,true,muted);doc.text(wrap(entry.label,tileWidth-24,9,true),x+12,y+37);});y+=58;
  }
- function itemLayout(item:Item,assignment:Assignment){
-  doc.setFont('helvetica','bold');doc.setFontSize(12);
-  const title:string[]=doc.splitTextToSize(clean(item.name),width-130),headerHeight=16+title.length*15;
-  const retention=formatRetention(assignment);
-  const metaHeight=32+Math.max(sourceLines(assignment.data_source).length,wrap(retention,118).length)*15;
-  const height=headerHeight+metaHeight+52+(wrap(item.description).length+wrap(item.expected_outcome).length)*14;
-  return {title,headerHeight,retention,height};
+ if(hasOverview(agency)){
+  overviewTitle=agency.overview_heading||defaultOverviewHeading;
+  content(overviewTitle,[agency.overview_introduction,agency.overview_features].filter(Boolean).join('\n\n'),true);overviewTitle='';y+=6;
+ }
+ if(hasOverview(agency)&&items.length>4&&groups.length){
+  if(y+40+groups.length*48>bottom)nextPage();
+  font(13,true);doc.text('Report sections',margin,y+17);y+=30;
+  for(const group of groups){if(y+44>bottom)nextPage();doc.setFillColor(...blueTint);doc.roundedRect(margin,y,width,40,4,4,'F');doc.setFillColor(...itemTypeColor(group.type));doc.rect(margin,y,4,40,'F');font(11,true);doc.text(group.type,margin+14,y+25);font(10,false,muted);doc.text(group.rows.length+' '+(group.rows.length===1?'item':'items'),margin+width-140,y+25);contentsRows.push({type:group.type,page:doc.getNumberOfPages(),y});y+=48;}
+  nextPage();
+ }
+ function briefFields(item:Item){
+  const a=reportBlocks(item.description||'Not specified'),b=reportBlocks(item.expected_outcome||'Not specified');
+  if(a.length!==1||b.length!==1||a[0].marker||b[0].marker||a[0].heading||b[0].heading)return null;
+  const left=richLines(reportSpans(a[0].text),230),right=richLines(reportSpans(b[0].text),230);
+  return left.length<=2&&right.length<=2?{left,right,height:34+Math.max(left.length,right.length)*leading}:null;
+ }
+ function drawBriefFields(fields:NonNullable<ReturnType<typeof briefFields>>){
+  if(y+fields.height>bottom)nextPage(true);
+  const half=(width-8)/2;doc.setFillColor(...blueTint);doc.roundedRect(margin,y,half,fields.height,4,4,'F');doc.setFillColor(...goldTint);doc.roundedRect(margin+half+8,y,half,fields.height,4,4,'F');
+  font(10,true);doc.text('Description',margin+14,y+16);doc.text('Expected outcome',margin+half+22,y+16);
+  drawLines(fields.left,margin+16,y+34);drawLines(fields.right,margin+half+24,y+34);y+=fields.height;
+ }
+ function estimatedItemHeight(item:Item,assignment:Assignment){
+  const title=Math.max(36,wrap(item.name,width-115,14,true).length*17+17)+8;
+  const meta=26+Math.max(wrap(assignment.data_source||'Not specified',332,11,true).length,wrap(formatRetention(assignment),136,11,true).length)*15+8;
+  const body=[item.description,item.expected_outcome].reduce((sum,text)=>sum+26+reportBlocks(text||'Not specified').reduce((n,b)=>n+richLines(reportSpans(b.text,!!b.marker),width-32-(b.marker?15:0)).length*leading+6,0),0);
+  const brief=briefFields(item);return title+meta+(brief?brief.height:body)+12;
+ }
+ function itemStartHeight(item:Item,assignment:Assignment){
+  const title=Math.max(36,wrap(item.name,width-115,14,true).length*17+17)+8;
+  const meta=26+Math.max(wrap(assignment.data_source||'Not specified',332,11,true).length,wrap(formatRetention(assignment),136,11,true).length)*15+8;
+  const first=reportBlocks(item.description||'Not specified')[0];
+  const firstHeight=richLines(reportSpans(first.text,!!first.marker),width-32-(first.marker?15:0)).length*leading+6;
+  return Math.min(estimatedItemHeight(item,assignment),title+Math.min(meta,100)+22+Math.min(firstHeight,160)+4);
  }
  for(const group of groups){
-  activeGroup=null;
-  const headingHeight=groupHeading(group.type).height+10;
-  const continuedHeadingHeight=groupHeading(group.type,true).height+10;
-  const first=group.rows[0],firstLayout=itemLayout(first.item!,first.assignment);
-  const firstSpace=firstLayout.height<=bottom-52-headingHeight?firstLayout.height:firstLayout.headerHeight+80;
-  // Keep each section heading with its first item, even after a long overview.
-  if(y+headingHeight+firstSpace>bottom)nextPage();
-  activeGroup={type:group.type,count:group.rows.length};drawGroupHeading();
-  group.rows.forEach(({assignment,item},index)=>{
-   if(!item)return; // Missing assigned items were rejected before creating the PDF.
-   toolName=item.name;shade=[255,255,255];
-   const {title,headerHeight,retention,height}=itemLayout(item,assignment);
-   if(index>0&&y+height>bottom&&height<=bottom-52-continuedHeadingHeight)nextPage();
-   if(y+headerHeight+42>bottom)nextPage();
-   fill(headerHeight);doc.setTextColor(26,46,73);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(title,margin+14,y+19);
-   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(91,107,127);doc.text(item.item_type,margin+width-14,y+19,{align:'right'});y+=headerHeight;
-   metadata(assignment.data_source,retention);paragraph('Description',item.description);paragraph('Expected outcome',item.expected_outcome);y+=14;
+  activeGroup=null;activeItem=null;
+  const first=group.rows[0],firstHeight=estimatedItemHeight(first.item!,first.assignment);
+  const required=bandHeight(group.type)+10+(firstHeight<270?firstHeight:itemStartHeight(first.item!,first.assignment));
+  if(y+required>bottom)nextPage();
+  activeGroup={type:group.type,count:group.rows.length};groupPages.set(group.type,doc.getNumberOfPages());groupBand();
+  group.rows.forEach(({item,assignment},index)=>{
+   if(!item)return;
+   activeItem=null;
+   const estimated=estimatedItemHeight(item,assignment);
+   const minStart=itemStartHeight(item,assignment);
+   if(index>0&&y+Math.min(estimated,estimated<270?estimated:minStart)>bottom)nextPage();
+   activeItem=item;itemHeader();metadata(assignment.data_source,formatRetention(assignment));const brief=briefFields(item);if(brief)drawBriefFields(brief);else{content('Description',item.description);content('Expected outcome',item.expected_outcome,true);}y+=12;
   });
-  activeGroup=null;y+=10;
+  activeItem=null;activeGroup=null;y+=8;
  }
- if(!groups.length)paragraph('Assigned tools','No items assigned to this agency.');
- const count=doc.getNumberOfPages();for(let p=coverData?2:1;p<=count;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(91,107,127);const footer=doc.splitTextToSize(clean(agency.agency_name),400)[0];doc.text(footer,margin,768);doc.text('Page '+(p-(coverData?1:0))+' of '+(count-(coverData?1:0)),570,768,{align:'right'});}
+ if(!groups.length)content('Assigned tools','No items assigned to this agency.');
+ const count=doc.getNumberOfPages(),offset=coverData?1:0;
+ for(const entry of contentsRows){const target=groupPages.get(entry.type);if(!target)continue;doc.setPage(entry.page);font(10,true);doc.text('Page '+(target-offset),margin+width-14,entry.y+25,{align:'right'});doc.link(margin,entry.y,width,40,{pageNumber:target});}
+ for(let p=1+offset;p<=count;p++){
+  doc.setPage(p);doc.setDrawColor(...lineColor);doc.setLineWidth(.7);doc.line(margin,752,margin+width,752);
+  font(8.5,false,muted);const footer=wrap(agency.agency_name,380,8.5)[0];font(8.5,false,muted);doc.text(footer,margin,768);doc.text('Page '+(p-offset)+' of '+(count-offset),margin+width,768,{align:'right'});
+ }
  return doc;
 }
 
@@ -132,4 +194,3 @@ export async function downloadAgencyRulesPdf(agency:Agency,items:Item[],assignme
  const name=agency.agency_name.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'Agency';
  buildAgencyRulesPdf(agency,items,assignments,logoData,coverData).save('Agency-Business-Rules-'+name+'.pdf');
 }
-

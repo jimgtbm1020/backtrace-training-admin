@@ -2,13 +2,14 @@
 
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
-import {Agency,Item,Assignment,agencyLocation,formatRetention} from './types';
+import {Agency,Item,Assignment,agencyLocation} from './types';
 import {itemTypes,groupAgencyAssignments} from './item-groups';
 import styles from './rules.module.css';
 import AgencyOverview,{OverviewEditor} from './agency-overview';
 import AssignmentWorkspace from './assignment-workspace';
 import DescriptionGenerator from './description-generator';
 import CatalogContent from './catalog-content';
+import AgencyReportItems from './agency-report-items';
 import ItemEditorDialog from './item-editor-dialog';
 import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
@@ -228,7 +229,7 @@ export default function AgencyBusinessRulesPage(){
    <p className={styles.description}>{descriptions.report}</p>
    <div className={styles.toolbar}><label>Report for agency<select value={reportAgencyId} disabled={disabled} onChange={e=>setReportAgencyId(e.target.value)}><option value="">Choose agency</option>{agencies.map(a=><option value={a.id} key={a.id}>{a.agency_name}{!a.active?' (Inactive)':''}</option>)}</select></label><button className={styles.primary} disabled={disabled||!reportAgency||!!error} onClick={()=>void exportPdf()}>{exportActive?'Generating report…':'Export PDF'}</button></div>
    {exportError&&<p role="alert">{exportError}</p>}
-   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header>{reportAgency.logo_url&&<img className={styles.reportLogo} src={reportAgency.logo_url} alt={reportAgency.agency_name+' logo'}/>}<h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><p>A fresh cinematic cover is created from this agency’s name and saved logo each time you export. The PDF includes the date printed.</p><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}{reportGroups.map((group,index)=><section key={group.type} className={styles.catalogSection+' '+styles.reportGroup} data-item-type={group.type} aria-labelledby={'report-type-'+index}><header className={styles.catalogHeader}><h3 id={'report-type-'+index}>{group.type}</h3><span className={styles.catalogCount}>{group.rows.length} {group.rows.length===1?'item':'items'}</span></header>{group.rows.map(({assignment:a,item})=><article className={styles.reportItem} key={a.id}><div className={styles.reportTitle}><h4>{item?.name||'Unavailable item'}</h4><span className={styles.badge}>{item?.item_type}</span></div><dl><div><dt>Data source</dt><dd>{a.data_source||'Not specified'}</dd></div><div><dt>Retention</dt><dd>{formatRetention(a)}</dd></div><div className={styles.full}><dt>Description</dt><dd>{item?.description}</dd></div><div className={styles.full}><dt>Expected outcome</dt><dd>{item?.expected_outcome||'Not specified'}</dd></div></dl></article>)}</section>)}{!reportGroups.length&&<p>No items assigned to this agency.</p>}</div>}
+   {reportAgency&&<div className={styles.report}><h2>Agency Business Rules</h2><header>{reportAgency.logo_url&&<img className={styles.reportLogo} src={reportAgency.logo_url} alt={reportAgency.agency_name+' logo'}/>}<h3>{reportAgency.agency_name}</h3><p>{reportAgency.agency_address}</p><p>{agencyLocation(reportAgency)}</p></header><p>A fresh cinematic cover is created from this agency’s name and saved logo each time you export. The PDF includes the date printed.</p><AgencyOverview agency={reportAgency}/>{canManage&&<button disabled={disabled} onClick={()=>editAgency(reportAgency)}>Edit agency overview</button>}<AgencyReportItems groups={reportGroups}/>{!reportGroups.length&&<p>No items assigned to this agency.</p>}</div>}
   </section>
  </main>;
 }

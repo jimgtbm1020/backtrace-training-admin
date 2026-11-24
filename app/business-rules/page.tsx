@@ -8,6 +8,8 @@ import styles from './rules.module.css';
 import AgencyOverview,{OverviewEditor} from './agency-overview';
 import AssignmentWorkspace from './assignment-workspace';
 import DescriptionGenerator from './description-generator';
+import CatalogContent from './catalog-content';
+import ItemEditorDialog from './item-editor-dialog';
 import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -37,6 +39,9 @@ export default function AgencyBusinessRulesPage(){
  useEffect(()=>{if(!logoFile){setLogoPreview('');return;}const url=URL.createObjectURL(logoFile);setLogoPreview(url);return()=>URL.revokeObjectURL(url);},[logoFile]);
  const [itemForm,setItemForm]=useState(blankItem),[editingItem,setEditingItem]=useState<Item|null>(null);
  const [itemEditorRevision,setItemEditorRevision]=useState(0);
+ const [itemEditorOpen,setItemEditorOpen]=useState(false);
+ const itemBaseline=editingItem||blankItem;
+ const itemDirty=(Object.keys(blankItem) as (keyof typeof blankItem)[]).some(key=>itemForm[key]!==itemBaseline[key]);
  const [agencyId,setAgencyId]=useState(''),[reportAgencyId,setReportAgencyId]=useState('');
  const importInput=useRef<HTMLInputElement>(null);const [importRows,setImportRows]=useState<ImportRow[]>([]);const [importFile,setImportFile]=useState('');
  const importPreview=previewAgencies(importRows,agencies);
@@ -77,8 +82,10 @@ export default function AgencyBusinessRulesPage(){
  },[]);
 
  function editAgency(row:Agency){setLogoFile(null);setRemoveLogo(false);setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,overview_heading:row.overview_heading||blankAgency.overview_heading,overview_introduction:row.overview_introduction||'',overview_features:row.overview_features||''});setTab('agencies');setMessage('');requestAnimationFrame(()=>document.getElementById('agency-editor')?.scrollIntoView({behavior:'smooth',block:'start'}));}
- function editItem(row:Item){setItemEditorRevision(value=>value+1);setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
+ function editItem(row:Item){setItemEditorRevision(value=>value+1);setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');setError('');setItemEditorOpen(true);}
  function resetItemEditor(){setItemEditorRevision(value=>value+1);setEditingItem(null);setItemForm(blankItem);}
+ function closeItemEditor(){setItemEditorOpen(false);resetItemEditor();setError('');setMessage('');}
+ function newItem(){resetItemEditor();setError('');setMessage('');setItemEditorOpen(true);}
  async function descriptionAccessToken(){const {data}=await supabase.auth.getSession();return data.session?.access_token||null;}
  async function previewImport(file:File){
   setError('');setMessage('');setImportRows([]);setImportFile('');
@@ -112,11 +119,11 @@ export default function AgencyBusinessRulesPage(){
   try{
    const payload={...itemForm,name:itemForm.name.trim().replace(/\s+/g,' '),description:itemForm.description.trim(),expected_outcome:itemForm.expected_outcome.trim(),updated_by:userId};
    if(!payload.name||!payload.description)throw new Error('Item name and description are required.');
-   if(items.some(row=>row.id!==editingItem?.id&&row.name.trim().replace(/\s+/g,' ').toLowerCase()===payload.name.toLowerCase()))throw new Error('This item name already exists. Choose it from Item name to update it.');
+   if(items.some(row=>row.id!==editingItem?.id&&row.name.trim().replace(/\s+/g,' ').toLowerCase()===payload.name.toLowerCase()))throw new Error('This item name already exists. Edit the saved item instead.');
    const result=editingItem?await supabase.from('resource_items').update(payload).eq('id',editingItem.id).eq('updated_at',editingItem.updated_at).select('id').maybeSingle():await supabase.from('resource_items').insert({...payload,created_by:userId}).select('id').single();
-   if(result.error)throw new Error(result.error.code==='23505'?'This item name already exists. Choose it from Item name to update it.':result.error.message);
+   if(result.error)throw new Error(result.error.code==='23505'?'This item name already exists. Edit the saved item instead.':result.error.message);
    if(!result.data)throw new Error('This item changed or is unavailable. Refresh and review it before saving.');
-   resetItemEditor();if(await load()){setMessage('Item saved.');}
+   const refreshed=await load();setItemEditorOpen(false);resetItemEditor();setMessage(refreshed?'Item saved.':'Item saved, but records could not refresh. Refresh records before editing again.');
   }catch(e){setError(e instanceof Error?e.message:'Unable to save item.');}finally{setBusy(false);}
  }
  async function saveAssignments(rows:{item_id:string;data_source:string;retention_value:string;retention_unit:string;expected_updated_at:string|null}[]){
@@ -171,8 +178,8 @@ export default function AgencyBusinessRulesPage(){
   </aside>}
   <nav className={styles.tabs} role="tablist" aria-label="Agency business rules">{tabs.map(([id,label])=><button type="button" key={id} role="tab" id={'rules-tab-'+id} aria-controls={'rules-panel-'+id} aria-selected={tab===id} onClick={()=>{setTab(id);setMessage('');}}>{label}</button>)}</nav>
   {!canManage&&<p className={styles.description}>Read-only access. Administrators and Coordinators maintain these records.</p>}
-  {error&&<div className={styles.error} role="alert">{error} <button type="button" disabled={disabled} onClick={()=>void load()}>Refresh records</button></div>}
-  {message&&<p role="status" aria-live="polite">{message}</p>}{loading&&<p role="status">Loading saved records…</p>}
+  {error&&!itemEditorOpen&&<div className={styles.error} role="alert">{error} <button type="button" disabled={disabled} onClick={()=>void load()}>Refresh records</button></div>}
+  {message&&!itemEditorOpen&&<p role="status" aria-live="polite">{message}</p>}{loading&&<p role="status">Loading saved records…</p>}
   <section id="rules-panel-agencies" role="tabpanel" aria-labelledby="rules-tab-agencies" hidden={tab!=='agencies'}>
    <p className={styles.description}>{descriptions.agencies}</p>
    <section className={styles.agencyDirectory} aria-labelledby="existing-agencies-heading"><div className={styles.directoryHeading}><div><h2 id="existing-agencies-heading">Existing agencies</h2><p>Choose an agency to manage its overview, tools, or report.</p></div><span className={styles.badge}>{agencies.length} agencies</span></div><div className={styles.agencyCards}>{agencies.map(row=><article className={styles.agencyCard} key={row.id}><div className={styles.cardTop}>{row.logo_url?<img className={styles.agencyLogo} src={row.logo_url} alt={row.agency_name+' logo'}/>:<span className={styles.agencyIcon} aria-hidden="true">▥</span>}<span className={styles.badge}>{row.active?'Active':'Inactive'}</span></div><h3>{row.agency_name}</h3><p>{assignments.filter(a=>a.agency_id===row.id).length} assigned tools</p><div className={styles.cardActions}>{canManage&&<><button className={styles.primary} disabled={disabled} onClick={()=>editAgency(row)}>Edit agency</button><button disabled={disabled||!row.active} onClick={()=>{setAgencyId(row.id);setTab('assign');}}>Manage tools</button></>}<button disabled={disabled} onClick={()=>{setReportAgencyId(row.id);setTab('report');}}>View report</button></div></article>)}</div>{!loading&&!agencies.length&&<p>No agencies saved yet. Create your first agency below.</p>}</section>
@@ -186,25 +193,26 @@ export default function AgencyBusinessRulesPage(){
   </section>
   <section id="rules-panel-items" role="tabpanel" aria-labelledby="rules-tab-items" hidden={tab!=='items'}>
    <p className={styles.description}>{descriptions.items}</p>
-   {canManage&&<form className={styles.panel} onSubmit={saveItem}><h2>{editingItem?'Edit item':'Create item'}</h2><fieldset className={styles.fields} disabled={disabled}>
+   {canManage&&<><div className={styles.catalogToolbar}><div><strong>Manage your item catalog</strong><p>Edit any saved item without leaving your place in the list.</p></div><button id="catalog-new-item" type="button" className={styles.primary} disabled={disabled} onClick={newItem}>New item</button></div>
+   <ItemEditorDialog open={itemEditorOpen} title={editingItem?'Edit item':'Create item'} subtitle={editingItem?.name||'Add a tool, dashboard, smart tool, or miscellaneous item.'} dirty={itemDirty} busy={disabled} editing={!!editingItem} error={error} onClose={closeItemEditor}>
+   <form id="catalog-item-form" onSubmit={saveItem}><fieldset className={styles.fields} disabled={disabled}>
     <label>Item type<select value={itemForm.item_type} onChange={e=>setItemForm({...itemForm,item_type:e.target.value})}>{itemTypes.map(t=><option key={t}>{t}</option>)}</select></label>
-    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{resetItemEditor();setMessage('');}}}><option value="">Create new item</option>{catalogGroups.filter(group=>group.items.length>0).map(group=><optgroup key={group.type} label={group.type}>{group.items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</optgroup>)}</select></label>
-    <label className={styles.full}>{editingItem?'Update item name':'New item name'}<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
-    <p className={styles.full}>Choose an existing item to update its saved details, or choose Create new item and enter a unique name.</p>
-    <label className={styles.full}>Description<textarea required maxLength={4000} rows={3} value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})}/></label>
+    <label>{editingItem?'Update item name':'New item name'}<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
+    <label className={styles.full}>Description<textarea required maxLength={4000} rows={8} value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})}/></label>
     <div className={styles.full}><DescriptionGenerator key={itemEditorRevision} name={itemForm.name} itemType={itemForm.item_type} description={itemForm.description} expectedOutcome={itemForm.expected_outcome} disabled={disabled} getAccessToken={descriptionAccessToken} onUse={description=>{setItemForm(current=>({...current,description}));setMessage('Description added to the form. Save the item to keep your changes.');}}/></div>
-    <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={3} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
-    <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{resetItemEditor();setError('');setMessage('');}}>New item</button></div>
-   </fieldset></form>}
+    <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={8} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
+    <p className={styles.formattingHint}>Formatting tip: use **bold text** to highlight words and start each list item with a dash (-).</p>
+   </fieldset>{message&&<p role="status" aria-live="polite">{message}</p>}</form>
+   </ItemEditorDialog></>}
    <div className={styles.panel+' '+styles.savedItems}>
     <div className={styles.savedItemsHeading}><h2>Saved items</h2><span className={styles.badge}>{items.length} {items.length===1?'item':'items'} total</span></div>
     {catalogGroups.map((group,index)=><section key={group.type} className={styles.catalogSection} data-item-type={group.type} aria-labelledby={'catalog-type-'+index}>
      <header className={styles.catalogHeader}><h3 id={'catalog-type-'+index}>{group.type}</h3><span className={styles.catalogCount}>{group.items.length} {group.items.length===1?'item':'items'}</span></header>
      <div className={styles.catalogBody}>{group.items.map(row=><article className={styles.savedItemCard} key={row.id} aria-labelledby={'saved-item-'+row.id}>
-      <header className={styles.savedItemHeader}><h4 id={'saved-item-'+row.id} className={styles.catalogItemName}>{row.name}</h4>{canManage&&<button type="button" className={styles.savedItemEdit} aria-label={'Edit '+row.name} disabled={disabled} onClick={()=>editItem(row)}>Edit item</button>}</header>
+      <header className={styles.savedItemHeader}><div><span className={styles.itemTypeTag}>{row.item_type}</span><h4 id={'saved-item-'+row.id} className={styles.catalogItemName}>{row.name}</h4></div>{canManage&&<button type="button" className={styles.savedItemEdit} aria-label={'Edit '+row.name} disabled={disabled} onClick={()=>editItem(row)}>Edit item</button>}</header>
       <dl className={styles.savedItemDetails}>
-       <div><dt>Description</dt><dd>{row.description}</dd></div>
-       <div><dt>Expected outcome</dt><dd>{row.expected_outcome||'Not specified'}</dd></div>
+       <div><dt><span aria-hidden="true" className={styles.detailMarker}/>Description</dt><dd><CatalogContent text={row.description}/></dd></div>
+       <div className={styles.expectedOutcome}><dt><span aria-hidden="true" className={styles.detailMarker}/>Expected outcome</dt><dd><CatalogContent text={row.expected_outcome||'Not specified'}/></dd></div>
       </dl>
      </article>)}{!loading&&!group.items.length&&<p className={styles.catalogEmpty}>No items saved in this category.</p>}</div>
     </section>)}
@@ -224,4 +232,3 @@ export default function AgencyBusinessRulesPage(){
   </section>
  </main>;
 }
-

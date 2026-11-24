@@ -18,7 +18,9 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
  doc.addFileToVFS('OpenSans-Bold.ttf',reportFontBold);doc.addFont('OpenSans-Bold.ttf','ReportSans','bold');
  doc.setProperties({title:'Agency Business Rules - '+agency.agency_name,subject:'Agency item descriptions, data sources, retention and expected outcomes',creator:'Backtrace Training Administration'});
  const margin=40,width=532,bottom=738,bodySize=10.5,leading=14.5;
- const contentsRows:{type:string;page:number;y:number}[]=[];const groupPages=new Map<string,number>();
+ type Destination={page:number;y:number};
+ const contentsRows:{key:string;page:number;y:number;height:number;group:boolean}[]=[];
+ const destinations=new Map<string,Destination>();
  let y=52,activeGroup:{type:string;count:number}|null=null,activeItem:Item|null=null,overviewTitle='';
  const clean=(value:string)=>cleanReportText(value||'Not specified');
  function font(size:number,bold=false,color:Color=ink){doc.setFont('ReportSans',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...color);doc.setCharSpace(0);}
@@ -115,6 +117,43 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   font(10,false,[218,227,239]);doc.text('BACKTRACE TRAINING ADMINISTRATION',54,721);doc.text('Date printed: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'}),54,741);
   doc.addPage();
  }
+ // Lay out the contents first, then fill in destinations after the report has paginated.
+ // This keeps printed page numbers and PDF links accurate for any description length.
+ if(groups.length){
+  function contentsPage(continued=false){
+   if(continued)doc.addPage();
+   font(8.5,true,muted);doc.text('BACKTRACE  /  AGENCY BUSINESS RULES',margin,30);
+   font(24,true);doc.text('Table of contents'+(continued?' (continued)':''),margin,60);
+   const names=wrap(agency.agency_name,width,12,true);font(12,true);doc.text(names,margin,82,{lineHeightFactor:1.25});
+   y=76+names.length*15;
+   font(10,false,muted);doc.text('Select a section or item to jump to its page.',margin,y+12);
+   font(8.5,true,muted);doc.text('PAGE',margin+width-14,y+12,{align:'right'});
+   doc.setDrawColor(...gold);doc.setLineWidth(2);doc.line(margin,y+23,margin+width,y+23);y+=35;
+  }
+  function contentsRow(key:string,label:string,group=false,color:Color=navy){
+   const lines=wrap(label,width-88,group?11:10.5,group),height=Math.max(group?30:22,lines.length*14.5+6);
+   doc.setFillColor(...(group?color:blueTint));doc.roundedRect(margin,y,width,height,group?4:0,group?4:0,'F');
+   font(group?11:10.5,group,group?[255,255,255]:ink);doc.text(lines,margin+14,y+17,{lineHeightFactor:14.5/(group?11:10.5)});
+   contentsRows.push({key,page:doc.getNumberOfPages(),y,height,group});y+=height+1;
+  }
+  contentsPage();
+  contentsRow('overview',hasOverview(agency)?'Agency overview':'Agency summary');y+=6;
+  for(const group of groups){
+   const heading=group.type+' ('+group.rows.length+' '+(group.rows.length===1?'item':'items')+')';
+   const headingHeight=Math.max(30,wrap(heading,width-88,11,true).length*14.5+6)+1;
+   const firstHeight=Math.max(22,wrap(group.rows[0].item!.name,width-88).length*14.5+6)+1;
+   if(y+headingHeight+firstHeight>bottom)contentsPage(true);
+   contentsRow('group:'+group.type,heading,true,itemTypeColor(group.type));
+   for(const {item} of group.rows){
+    const height=Math.max(22,wrap(item!.name,width-88).length*14.5+6)+1;
+    if(y+height>bottom){contentsPage(true);contentsRow('group:'+group.type,group.type+' (continued)',true,itemTypeColor(group.type));}
+    contentsRow('item:'+item!.id,item!.name);
+   }
+   y+=3;
+  }
+  doc.addPage();
+ }
+ destinations.set('overview',{page:doc.getNumberOfPages(),y:40});
  font(8.5,true,muted);doc.text('BACKTRACE TRAINING ADMINISTRATION',margin,30);
  font(24,true);doc.text('Agency Business Rules',margin,66);
  const names=wrap(agency.agency_name,logoData?width-88:width,16,true);font(16,true);doc.text(names,margin,93,{lineHeightFactor:1.25});y=99+names.length*20;
@@ -131,12 +170,7 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   overviewTitle=agency.overview_heading||defaultOverviewHeading;
   content(overviewTitle,[agency.overview_introduction,agency.overview_features].filter(Boolean).join('\n\n'),true);overviewTitle='';y+=6;
  }
- if(hasOverview(agency)&&items.length>4&&groups.length){
-  if(y+40+groups.length*48>bottom)nextPage();
-  font(13,true);doc.text('Report sections',margin,y+17);y+=30;
-  for(const group of groups){if(y+44>bottom)nextPage();doc.setFillColor(...blueTint);doc.roundedRect(margin,y,width,40,4,4,'F');doc.setFillColor(...itemTypeColor(group.type));doc.rect(margin,y,4,40,'F');font(11,true);doc.text(group.type,margin+14,y+25);font(10,false,muted);doc.text(group.rows.length+' '+(group.rows.length===1?'item':'items'),margin+width-140,y+25);contentsRows.push({type:group.type,page:doc.getNumberOfPages(),y});y+=48;}
-  nextPage();
- }
+ if(hasOverview(agency)&&groups.length)nextPage();
  function briefFields(item:Item){
   const a=reportBlocks(item.description||'Not specified'),b=reportBlocks(item.expected_outcome||'Not specified');
   if(a.length!==1||b.length!==1||a[0].marker||b[0].marker||a[0].heading||b[0].heading)return null;
@@ -167,20 +201,20 @@ export function buildAgencyRulesPdf(agency:Agency,items:Item[],assignments:Assig
   const first=group.rows[0],firstHeight=estimatedItemHeight(first.item!,first.assignment);
   const required=bandHeight(group.type)+10+(firstHeight<270?firstHeight:itemStartHeight(first.item!,first.assignment));
   if(y+required>bottom)nextPage();
-  activeGroup={type:group.type,count:group.rows.length};groupPages.set(group.type,doc.getNumberOfPages());groupBand();
+  activeGroup={type:group.type,count:group.rows.length};destinations.set('group:'+group.type,{page:doc.getNumberOfPages(),y});groupBand();
   group.rows.forEach(({item,assignment},index)=>{
    if(!item)return;
    activeItem=null;
    const estimated=estimatedItemHeight(item,assignment);
    const minStart=itemStartHeight(item,assignment);
    if(index>0&&y+Math.min(estimated,estimated<270?estimated:minStart)>bottom)nextPage();
-   activeItem=item;itemHeader();metadata(assignment.data_source,formatRetention(assignment));const brief=briefFields(item);if(brief)drawBriefFields(brief);else{content('Description',item.description);content('Expected outcome',item.expected_outcome,true);}y+=12;
+   activeItem=item;destinations.set('item:'+item.id,{page:doc.getNumberOfPages(),y});itemHeader();metadata(assignment.data_source,formatRetention(assignment));const brief=briefFields(item);if(brief)drawBriefFields(brief);else{content('Description',item.description);content('Expected outcome',item.expected_outcome,true);}y+=12;
   });
   activeItem=null;activeGroup=null;y+=8;
  }
  if(!groups.length)content('Assigned tools','No items assigned to this agency.');
  const count=doc.getNumberOfPages(),offset=coverData?1:0;
- for(const entry of contentsRows){const target=groupPages.get(entry.type);if(!target)continue;doc.setPage(entry.page);font(10,true);doc.text('Page '+(target-offset),margin+width-14,entry.y+25,{align:'right'});doc.link(margin,entry.y,width,40,{pageNumber:target});}
+ for(const entry of contentsRows){const target=destinations.get(entry.key);if(!target)continue;doc.setPage(entry.page);font(10,true,entry.group?[255,255,255]:ink);doc.text(String(target.page-offset),margin+width-14,entry.y+17,{align:'right'});doc.link(margin,entry.y,width,entry.height,{pageNumber:target.page,top:target.y});}
  for(let p=1+offset;p<=count;p++){
   doc.setPage(p);doc.setDrawColor(...lineColor);doc.setLineWidth(.7);doc.line(margin,752,margin+width,752);
   font(8.5,false,muted);const footer=wrap(agency.agency_name,380,8.5)[0];font(8.5,false,muted);doc.text(footer,margin,768);doc.text('Page '+(p-offset)+' of '+(count-offset),margin+width,768,{align:'right'});

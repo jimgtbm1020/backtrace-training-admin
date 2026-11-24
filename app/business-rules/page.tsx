@@ -7,6 +7,7 @@ import {itemTypes,groupAgencyAssignments} from './item-groups';
 import styles from './rules.module.css';
 import AgencyOverview,{OverviewEditor} from './agency-overview';
 import AssignmentWorkspace from './assignment-workspace';
+import DescriptionGenerator from './description-generator';
 import {ImportRow,parseAgencyCsv,previewAgencies} from './import-csv';
 
 const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -35,6 +36,7 @@ export default function AgencyBusinessRulesPage(){
  const [logoFile,setLogoFile]=useState<File|null>(null),[removeLogo,setRemoveLogo]=useState(false),[logoPreview,setLogoPreview]=useState('');
  useEffect(()=>{if(!logoFile){setLogoPreview('');return;}const url=URL.createObjectURL(logoFile);setLogoPreview(url);return()=>URL.revokeObjectURL(url);},[logoFile]);
  const [itemForm,setItemForm]=useState(blankItem),[editingItem,setEditingItem]=useState<Item|null>(null);
+ const [itemEditorRevision,setItemEditorRevision]=useState(0);
  const [agencyId,setAgencyId]=useState(''),[reportAgencyId,setReportAgencyId]=useState('');
  const importInput=useRef<HTMLInputElement>(null);const [importRows,setImportRows]=useState<ImportRow[]>([]);const [importFile,setImportFile]=useState('');
  const importPreview=previewAgencies(importRows,agencies);
@@ -75,7 +77,9 @@ export default function AgencyBusinessRulesPage(){
  },[]);
 
  function editAgency(row:Agency){setLogoFile(null);setRemoveLogo(false);setEditingAgency(row);setAgencyForm({agency_name:row.agency_name,overview_heading:row.overview_heading||blankAgency.overview_heading,overview_introduction:row.overview_introduction||'',overview_features:row.overview_features||''});setTab('agencies');setMessage('');requestAnimationFrame(()=>document.getElementById('agency-editor')?.scrollIntoView({behavior:'smooth',block:'start'}));}
- function editItem(row:Item){setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
+ function editItem(row:Item){setItemEditorRevision(value=>value+1);setEditingItem(row);setItemForm({name:row.name,item_type:row.item_type,description:row.description,expected_outcome:row.expected_outcome});setTab('items');setMessage('');}
+ function resetItemEditor(){setItemEditorRevision(value=>value+1);setEditingItem(null);setItemForm(blankItem);}
+ async function descriptionAccessToken(){const {data}=await supabase.auth.getSession();return data.session?.access_token||null;}
  async function previewImport(file:File){
   setError('');setMessage('');setImportRows([]);setImportFile('');
   try{if(file.size>1024*1024)throw new Error('Choose a CSV smaller than 1 MB.');const rows=parseAgencyCsv(await file.text());setImportRows(rows);setImportFile(file.name);}catch(e){setError(e instanceof Error?e.message:'Unable to read CSV.');}
@@ -112,7 +116,7 @@ export default function AgencyBusinessRulesPage(){
    const result=editingItem?await supabase.from('resource_items').update(payload).eq('id',editingItem.id).eq('updated_at',editingItem.updated_at).select('id').maybeSingle():await supabase.from('resource_items').insert({...payload,created_by:userId}).select('id').single();
    if(result.error)throw new Error(result.error.code==='23505'?'This item name already exists. Choose it from Item name to update it.':result.error.message);
    if(!result.data)throw new Error('This item changed or is unavailable. Refresh and review it before saving.');
-   setEditingItem(null);setItemForm(blankItem);if(await load()){setMessage('Item saved.');}
+   resetItemEditor();if(await load()){setMessage('Item saved.');}
   }catch(e){setError(e instanceof Error?e.message:'Unable to save item.');}finally{setBusy(false);}
  }
  async function saveAssignments(rows:{item_id:string;data_source:string;retention_value:string;retention_unit:string;expected_updated_at:string|null}[]){
@@ -184,12 +188,13 @@ export default function AgencyBusinessRulesPage(){
    <p className={styles.description}>{descriptions.items}</p>
    {canManage&&<form className={styles.panel} onSubmit={saveItem}><h2>{editingItem?'Edit item':'Create item'}</h2><fieldset className={styles.fields} disabled={disabled}>
     <label>Item type<select value={itemForm.item_type} onChange={e=>setItemForm({...itemForm,item_type:e.target.value})}>{itemTypes.map(t=><option key={t}>{t}</option>)}</select></label>
-    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{setEditingItem(null);setItemForm(blankItem);setMessage('');}}}><option value="">Create new item</option>{catalogGroups.filter(group=>group.items.length>0).map(group=><optgroup key={group.type} label={group.type}>{group.items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</optgroup>)}</select></label>
+    <label>Item name<select value={editingItem?.id||''} onChange={e=>{const row=items.find(item=>item.id===e.target.value);setError('');if(row)editItem(row);else{resetItemEditor();setMessage('');}}}><option value="">Create new item</option>{catalogGroups.filter(group=>group.items.length>0).map(group=><optgroup key={group.type} label={group.type}>{group.items.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</optgroup>)}</select></label>
     <label className={styles.full}>{editingItem?'Update item name':'New item name'}<input required maxLength={160} value={itemForm.name} onChange={e=>setItemForm({...itemForm,name:e.target.value})}/></label>
     <p className={styles.full}>Choose an existing item to update its saved details, or choose Create new item and enter a unique name.</p>
     <label className={styles.full}>Description<textarea required maxLength={4000} rows={3} value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})}/></label>
+    <div className={styles.full}><DescriptionGenerator key={itemEditorRevision} name={itemForm.name} itemType={itemForm.item_type} description={itemForm.description} expectedOutcome={itemForm.expected_outcome} disabled={disabled} getAccessToken={descriptionAccessToken} onUse={description=>{setItemForm(current=>({...current,description}));setMessage('Description added to the form. Save the item to keep your changes.');}}/></div>
     <label className={styles.full}>Expected outcome from using this item<textarea maxLength={2000} rows={3} placeholder="Describe the result users should achieve." value={itemForm.expected_outcome} onChange={e=>setItemForm({...itemForm,expected_outcome:e.target.value})}/></label>
-    <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{setEditingItem(null);setItemForm(blankItem);setError('');setMessage('');}}>New item</button></div>
+    <div className={styles.actions}><button type="submit" className={styles.primary}>{busy?'Saving…':editingItem?'Update item':'Create item'}</button><button type="button" onClick={()=>{resetItemEditor();setError('');setMessage('');}}>New item</button></div>
    </fieldset></form>}
    <div className={styles.panel+' '+styles.savedItems}>
     <div className={styles.savedItemsHeading}><h2>Saved items</h2><span className={styles.badge}>{items.length} {items.length===1?'item':'items'} total</span></div>

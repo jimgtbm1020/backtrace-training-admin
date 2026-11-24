@@ -82,3 +82,17 @@
  .savedItemDetails>div+div{border-left:0;border-top:1px solid var(--rules-line);margin-left:0;padding-left:0;padding-top:16px}
  .savedItemDetails dd{font-size:14px}
 }
+
+.descriptionAssistant{margin-top:-8px}
+.generateDescriptionButton{display:inline-flex;align-items:center;gap:8px;background:#eaf1fc!important;border:1px solid #a9bfdf!important;color:#153b70!important;font-weight:700}
+.generateDescriptionButton:hover:not(:disabled){background:#dce8f9!important;border-color:#557caf!important}
+.generateDescriptionButton:focus-visible,.descriptionGenerator button:focus-visible{outline:3px solid #b78228;outline-offset:3px}
+.descriptionGenerator{margin-top:14px;padding:20px;border:1px solid #c6d5e8;border-radius:10px;background:#f6f9fd}
+.descriptionGenerator>p{margin:0 0 14px;color:var(--rules-muted);font-size:14px;line-height:1.5}
+.descriptionGenerator label{display:flex;flex-direction:column;gap:8px}
+.descriptionGenerator textarea{width:100%;box-sizing:border-box;resize:vertical}
+.descriptionGenerator small{display:block;color:var(--rules-muted);margin-top:8px;line-height:1.5}
+.descriptionGenerator .actions{margin-top:14px}
+.descriptionDraft{margin-top:18px;padding-top:18px;border-top:1px solid #c6d5e8}
+.descriptionDraft p{font-size:13px;color:var(--rules-muted);line-height:1.5}
+@media(max-width:640px){.descriptionGenerator{padding:14px}.descriptionGenerator .actions button{width:100%}}
